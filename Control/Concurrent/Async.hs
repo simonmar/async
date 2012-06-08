@@ -1,15 +1,82 @@
 {-# LANGUAGE CPP, MagicHash, UnboxedTuples #-}
 
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  Control.Concurrent.Async
+-- Copyright   :  (c) Simon Marlow 2012
+-- License     :  BSD3 (see the file LICENSE)
+--
+-- Maintainer  :  Simon Marlow <marlowsd@gmail.com>
+-- Stability   :  provisional
+-- Portability :  non-portable (requires concurrency)
+--
+-- This module provides a set of operations for running IO operations
+-- asynchronously and waiting for their results.  It is a thin layer
+-- over the basic concurrency operations provided by
+-- "Control.Concurrent".  The main additional functionality it
+-- provides is the ability to wait for the return value of a thread,
+-- but the interface also provides some additional safety and
+-- robustness over using threads and @MVar@ directly.
+--
+-- The basic type is @'Async' a@, which represents an asynchronous
+-- @IO@ action that will return a value of type @a@, or die with an
+-- exception.  An @Async@ corresponds to a thread, and its 'ThreadId'
+-- can be obtained with 'asyncThreadId', although that should rarely
+-- be necessary.
+--
+-- For example, to fetch two web pages at the same time, we could do
+-- this (assuming a suitable @getURL@ function):
+--
+-- >    do a1 <- async (getURL url1)
+-- >       a2 <- async (getURL url2)
+-- >       page1 <- waitThrow a1
+-- >       page2 <- waitThrow a2
+-- >       ...
+--
+-- where 'async' starts the operation in a separate thread, and
+-- 'waitThrow' waits for and returns the result.  If the operation
+-- throws an exception, then that exception is re-thrown by
+-- 'waitThrow'.  This is one of the ways in which this library
+-- provides some additional safety: it is harder to accidentally
+-- forget about exceptions thrown in child threads.
+--
+-- A slight improvement over the previous example is this:
+--
+-- >       withAsync (getURL url1) $ \a1 -> do
+-- >       withAsync (getURL url2) $ \a2 -> do
+-- >       page1 <- waitThrow a1
+-- >       page2 <- waitThrow a2
+-- >       ...
+--
+-- 'withAsync' is like 'async', except that the 'Async' is
+-- automatically killed (using 'cancel') if the enclosing IO operation
+-- returns before it has completed.  Consider the case when the first
+-- 'waitThrow' throws an exception; then the second 'Async' will be
+-- automatically killed rather than being left to run in the
+-- background, possibly indefinitely.  This is the second way that the
+-- library provides additional safety: using 'withAsync' means we can
+-- avoid accidentally leaving threads running.
+--
+-- Furthermore, 'withAsync' allows a tree of threads to be built, such
+-- that children are automatically killed if their parents die for any
+-- reason.
+--
+-----------------------------------------------------------------------------
+
 module Control.Concurrent.Async (
 
-    -- * Async API
-    Async, async, withAsync, asyncThreadId, wait, waitThrow, cancel, cancelWith,
-    -- ** STM API
+    -- * Async
+    Async, async, withAsync, asyncThreadId,
+    wait, waitThrow, cancel, cancelWith,
+
+    -- ** STM operations
     waitSTM, waitSTMThrow,
+
     -- ** Waiting for multiple asyncs
-    waitAny, waitAnyThrow, waitAnyThrowCancel,
-    waitEither, waitEitherThrow, waitEitherThrow_, waitEitherThrowCancel,
+    waitAny, waitAnyCancel, waitAnyThrow, waitAnyThrowCancel,
+    waitEither, waitEitherCancel, waitEitherThrow, waitEitherThrow_, waitEitherThrowCancel,
     waitBothThrow,
+
     -- ** Linking
     link, link2,
 
