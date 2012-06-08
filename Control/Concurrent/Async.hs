@@ -145,6 +145,13 @@ waitAny asyncs =
     foldr orElse (return ()) $
       map (void . waitSTM) asyncs
 
+-- | Like 'waitAny', but also cancels the other asynchronous
+-- operations as soon as one has completed.
+--
+waitAnyCancel :: [Async a] -> IO ()
+waitAnyCancel asyncs =
+  waitAny asyncs `finally` mapM_ cancel asyncs
+
 -- | Wait for any of the supplied @Async@s to complete.  If the first
 -- to complete raises an exception, then that exception is re-thrown
 -- by 'waitAnyThrow'.
@@ -171,6 +178,15 @@ waitEither left right =
     (Left  <$> waitSTM left)
       `orElse`
     (Right <$> waitSTM right)
+
+-- | Like 'waitEither', but also 'cancel's both @Async@s before
+-- returning.
+--
+waitEitherCancel :: Async a -> Async b
+                 -> IO (Either (Either SomeException a)
+                               (Either SomeException b))
+waitEitherCancel left right =
+  waitEither left right `finally` (cancel left >> cancel right)
 
 -- | Wait for the first of two @Async@s to finish.  If the @Async@
 -- that finished first raised an exception, then the exception is
