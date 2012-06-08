@@ -31,7 +31,7 @@ import GHC.Conc
 -- -----------------------------------------------------------------------------
 -- Fork that executes an action at the end
 
--- | fork a thread that runs the supplied action, and if it raises an
+-- | Fork a thread that runs the supplied action, and if it raises an
 -- exception, re-runs the action.  The thread terminates only when the
 -- action runs to completion without raising an exception.
 forkRepeat :: IO a -> IO ThreadId
@@ -61,7 +61,7 @@ instance Eq (Async a) where
 instance Ord (Async a) where
   Async a _ `compare` Async b _  =  a `compare` b
 
--- | spawn an asynchronous action in a separate thread.
+-- | Spawn an asynchronous action in a separate thread.
 async :: IO a -> IO (Async a)
 async action = do
    var <- newEmptyTMVarIO
@@ -71,7 +71,7 @@ async action = do
           rawForkIO $ do r <- try (restore action); atomically $ putTMVar var r
    return (Async t var)
 
--- | spawn an asynchronous action in a separate thread, and pass its
+-- | Spawn an asynchronous action in a separate thread, and pass its
 -- @Async@ handle to the supplied function.  When the function returns
 -- or throws an exception, 'cancel' is called on the @Async@.
 --
@@ -92,8 +92,8 @@ withAsync action inner = do
     cancel a
     return r
 
--- | wait for an asynchronous action to complete, and return either
--- @Left e@ if the action raise an exception @e@, or @Right a@ if it
+-- | Wait for an asynchronous action to complete, and return either
+-- @Left e@ if the action raised an exception @e@, or @Right a@ if it
 -- returned a value @a@.
 --
 -- > wait = atomically . waitSTM
@@ -125,8 +125,8 @@ waitSTMThrow (Async _ var) = do
    either throwSTM return r
 
 -- | Cancel an asynchronous action by throwing the @ThreadKilled@
--- exception to it.
---
+-- exception to it.  Has no effect if the 'Async' has already
+-- completed.
 {-# INLINE cancel #-}
 cancel :: Async a -> IO ()
 cancel (Async t _) = throwTo t ThreadKilled
@@ -155,7 +155,7 @@ waitAnyThrow asyncs =
     foldr orElse (return ()) $
       map (void . waitSTMThrow) asyncs
 
--- | like 'waitAnyThrow', but also cancels the other asynchronous
+-- | Like 'waitAnyThrow', but also cancels the other asynchronous
 -- operations as soon as one has completed.
 --
 waitAnyThrowCancel :: [Async a] -> IO ()
@@ -172,8 +172,8 @@ waitEither left right =
       `orElse`
     (Right <$> waitSTM right)
 
--- | Wait for the first of two @Async@s to finish.  If the first
--- @Async@ to finish raised an exception, then the exception is
+-- | Wait for the first of two @Async@s to finish.  If the @Async@
+-- that finished first raised an exception, then the exception is
 -- re-thrown by 'waitEitherThrow'.
 --
 waitEitherThrow :: Async a -> Async b -> IO (Either a b)
@@ -192,16 +192,16 @@ waitEitherThrow_ left right =
       `orElse`
     (void $ waitSTMThrow right)
 
--- | like 'waitEitherThow', but also 'cancel's both @Async@s before
+-- | Like 'waitEitherThow', but also 'cancel's both @Async@s before
 -- returning.
 --
 waitEitherThrowCancel :: Async a -> Async b -> IO (Either a b)
 waitEitherThrowCancel left right =
   waitEitherThrow left right `finally` (cancel left >> cancel right)
 
--- | waits for both @Async@s to finish, but if either of them throws
+-- | Waits for both @Async@s to finish, but if either of them throws
 -- an exception before they have both finished, then the exception is
--- re-thrown by 'waitBothThrow'
+-- re-thrown by 'waitBothThrow'.
 --
 waitBothThrow :: Async a -> Async b -> IO (a,b)
 waitBothThrow left right =
@@ -242,7 +242,7 @@ link2 left@(Async tl _)  right@(Async tr _) =
 
 -- -----------------------------------------------------------------------------
 
--- | run two @IO@ actions concurrently, and return the first to
+-- | Run two @IO@ actions concurrently, and return the first to
 -- finish.  The loser of the race is 'cancel'led.
 --
 -- > race left right =
@@ -252,11 +252,11 @@ link2 left@(Async tl _)  right@(Async tr _) =
 --
 race :: IO a -> IO b -> IO (Either a b)
 
--- | like 'race', but the result is ignored.
+-- | Like 'race', but the result is ignored.
 --
 race_ :: IO a -> IO b -> IO ()
 
--- | run two @IO@ actions concurrently, and return both results.  If
+-- | Run two @IO@ actions concurrently, and return both results.  If
 -- either action throws an exception at any time, then the other
 -- action is 'cancel'led, and the exception is re-thrown by
 -- 'concurrently'.
