@@ -1,5 +1,27 @@
 name:                async
-synposis:            Run IO operations asynchronously and wait for their results
+synopsis:            Run IO operations asynchronously and wait for their results
+
+description:
+ This package provides a higher-level interface over
+ threads, in which an @Async a@ is a concurrent
+ thread that will eventually deliver a value of
+ type @a@.  The package provides ways to create
+ @Async@ computations, wait for their results, and
+ cancel them.
+ .
+ Using @Async@ is safer than using threads in two
+ ways:
+ .
+ * when waiting for a thread to return a result,
+   if the thread dies with an exception then the
+   caller must either handle the exception
+   ('wait') or re-throw it ('waitThrow'); the
+   exception cannot be ignored.
+ .
+ * the API makes it possible to build a tree of
+   threads that are automatically killed when
+   their parent dies (see 'withAsync').
+
 version:             2.0
 license:             BSD3
 license-file:        LICENSE
@@ -12,4 +34,4 @@ cabal-version:       >=1.8
 
 library
   exposed-modules:     Control.Concurrent.Async
-  build-depends:       base ==4.5.*, stm ==2.3.*
+  build-depends:       base >= 4.3 && < 4.6, stm >= 2.2 && < 2.4
