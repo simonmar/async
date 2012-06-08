@@ -96,21 +96,6 @@ import GHC.IO hiding (finally, onException)
 import GHC.Conc
 
 -- -----------------------------------------------------------------------------
--- Fork that executes an action at the end
-
--- | Fork a thread that runs the supplied action, and if it raises an
--- exception, re-runs the action.  The thread terminates only when the
--- action runs to completion without raising an exception.
-forkRepeat :: IO a -> IO ThreadId
-forkRepeat action =
-  mask $ \restore ->
-    let go = do r <- tryAll (restore action)
-                case r of
-                  Left _ -> go
-                  _      -> return ()
-    in forkIO go
-
--- -----------------------------------------------------------------------------
 -- STM Async API
 
 
@@ -416,6 +401,18 @@ concurrently' left right collect = do
 #endif
 
 -- ----------------------------------------------------------------------------
+
+-- | Fork a thread that runs the supplied action, and if it raises an
+-- exception, re-runs the action.  The thread terminates only when the
+-- action runs to completion without raising an exception.
+forkRepeat :: IO a -> IO ThreadId
+forkRepeat action =
+  mask $ \restore ->
+    let go = do r <- tryAll (restore action)
+                case r of
+                  Left _ -> go
+                  _      -> return ()
+    in forkIO go
 
 catchAll :: IO a -> (SomeException -> IO a) -> IO a
 catchAll = catch
