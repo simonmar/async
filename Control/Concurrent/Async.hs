@@ -104,8 +104,8 @@ import GHC.Conc
 -- operations are provided for waiting for asynchronous actions to
 -- complete and obtaining their results (see e.g. 'wait').
 --
-data Async a = Async { asyncThreadId :: ThreadId
-                     , _asyncVar     :: TMVar (Either SomeException a) }
+data Async a = Async { asyncThreadId :: {-# UNPACK #-} !ThreadId
+                     , _asyncVar     :: {-# UNPACK #-} !(TMVar (Either SomeException a)) }
 
 instance Eq (Async a) where
   Async a _ == Async b _  =  a == b
@@ -392,10 +392,9 @@ concurrently' left right collect = do
                              `catchAll` (putMVar done . Left)
         rid <- forkIO $ restore (right >>= putMVar done . Right . Right)
                              `catchAll` (putMVar done . Left)
-        let tids = [lid,rid]
-        let stop threads = mapM_ killThread threads
-        r <- restore (collect done) `onException` stop tids
-        stop tids
+        let stop = killThread lid >> killThread rid
+        r <- restore (collect done) `onException` stop
+        stop
         return r
 
 #endif
@@ -423,6 +422,7 @@ tryAll = try
 -- A version of forkIO that does not include the outer exception
 -- handler: saves a bit of time when we will be installing our own
 -- exception handler.
+{-# INLINE rawForkIO #-}
 rawForkIO :: IO () -> IO ThreadId
 rawForkIO action = IO $ \ s ->
    case (fork# action s) of (# s1, tid #) -> (# s1, ThreadId tid #)
