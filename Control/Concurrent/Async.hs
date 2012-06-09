@@ -67,14 +67,15 @@ module Control.Concurrent.Async (
 
     -- * Async
     Async, async, withAsync, asyncThreadId,
-    wait, waitThrow, cancel, cancelWith,
+    wait, tryWait, waitThrow, cancel, cancelWith,
 
     -- ** STM operations
-    waitSTM, waitSTMThrow,
+    waitSTM, tryWaitSTM, waitThrowSTM,
 
     -- ** Waiting for multiple asyncs
     waitAny, waitAnyCancel, waitAnyThrow, waitAnyThrowCancel,
-    waitEither, waitEitherCancel, waitEitherThrow, waitEitherThrow_, waitEitherThrowCancel,
+    waitEither, waitEitherCancel, waitEitherThrow,
+    waitEitherThrow_, waitEitherThrowCancel,
     waitBothThrow,
 
     -- ** Linking
@@ -154,14 +155,25 @@ withAsync action inner = do
 wait :: Async a -> IO (Either SomeException a)
 wait = atomically . waitSTM
 
+-- | Check whether an 'Async' has completed yet.  If it has not
+-- completed yet, then the result is @Nothing@, otherwise the result
+-- is @Just e@ where @e@ is @Left x@ if the @Async@ raised an
+-- exception @x@, or @Right a@ if it returned a value @a@.
+--
+-- > wait = atomically . tryWaitSTM
+--
+{-# INLINE tryWait #-}
+tryWait :: Async a -> IO (Maybe (Either SomeException a))
+tryWait = atomically . tryWaitSTM
+
 -- | A version of 'wait' that throws the exception if the asynchronous
 -- action raised one, or otherwise returns its result.
 --
--- > waitThrow = atomically . waitSTMThrow
+-- > waitThrow = atomically . waitThrowSTM
 --
 {-# INLINE waitThrow #-}
 waitThrow :: Async a -> IO a
-waitThrow = atomically . waitSTMThrow
+waitThrow = atomically . waitThrowSTM
 
 -- | A version of 'wait' that can be used inside an STM transaction.
 --
@@ -169,10 +181,16 @@ waitThrow = atomically . waitSTMThrow
 waitSTM :: Async a -> STM (Either SomeException a)
 waitSTM (Async _ var) = readTMVar var
 
+-- | A version of 'tryWait' that can be used inside an STM transaction.
+--
+{-# INLINE tryWaitSTM #-}
+tryWaitSTM :: Async a -> STM (Maybe (Either SomeException a))
+tryWaitSTM (Async _ var) = tryReadTMVar var
+
 -- | A version of 'waitThrow' that can be used inside an STM transaction.
 --
-waitSTMThrow :: Async a -> STM a
-waitSTMThrow (Async _ var) = do
+waitThrowSTM :: Async a -> STM a
+waitThrowSTM (Async _ var) = do
    r <- readTMVar var
    either throwSTM return r
 
@@ -190,34 +208,39 @@ cancelWith :: Exception e => Async a -> e -> IO ()
 cancelWith (Async t _) e = throwTo t e
 
 -- | Wait for any of the supplied asynchronous operations to complete.
+-- The value returned is a pair of the 'Async' that completed, and the
+-- result that would be returned by 'wait' on that 'Async'.
 --
-waitAny :: [Async a] -> IO ()
+-- If multiple 'Async's complete or have completed, then the value
+-- returned corresponds to the first completed 'Async' in the list.
+--
+waitAny :: [Async a] -> IO (Async a, Either SomeException a)
 waitAny asyncs =
   atomically $
-    foldr orElse (return ()) $
-      map (void . waitSTM) asyncs
+    foldr orElse retry $
+      map (\a -> do r <- waitSTM a; return (a, r)) asyncs
 
 -- | Like 'waitAny', but also cancels the other asynchronous
 -- operations as soon as one has completed.
 --
-waitAnyCancel :: [Async a] -> IO ()
+waitAnyCancel :: [Async a] -> IO (Async a, Either SomeException a)
 waitAnyCancel asyncs =
   waitAny asyncs `finally` mapM_ cancel asyncs
 
 -- | Wait for any of the supplied @Async@s to complete.  If the first
--- to complete raises an exception, then that exception is re-thrown
+-- to complete throw an exception, then that exception is re-thrown
 -- by 'waitAnyThrow'.
 --
-waitAnyThrow :: [Async a] -> IO ()
+waitAnyThrow :: [Async a] -> IO (Async a, a)
 waitAnyThrow asyncs =
   atomically $
-    foldr orElse (return ()) $
-      map (void . waitSTMThrow) asyncs
+    foldr orElse retry $
+      map (\a -> do r <- waitThrowSTM a; return (a, r)) asyncs
 
 -- | Like 'waitAnyThrow', but also cancels the other asynchronous
 -- operations as soon as one has completed.
 --
-waitAnyThrowCancel :: [Async a] -> IO ()
+waitAnyThrowCancel :: [Async a] -> IO (Async a, a)
 waitAnyThrowCancel asyncs =
   waitAnyThrow asyncs `finally` mapM_ cancel asyncs
 
@@ -247,18 +270,18 @@ waitEitherCancel left right =
 waitEitherThrow :: Async a -> Async b -> IO (Either a b)
 waitEitherThrow left right =
   atomically $
-    (Left  <$> waitSTMThrow left)
+    (Left  <$> waitThrowSTM left)
       `orElse`
-    (Right <$> waitSTMThrow right)
+    (Right <$> waitThrowSTM right)
 
 -- | Like 'waitEitherThrow', but the results are ignored.
 --
 waitEitherThrow_ :: Async a -> Async b -> IO ()
 waitEitherThrow_ left right =
   atomically $
-    (void $ waitSTMThrow left)
+    (void $ waitThrowSTM left)
       `orElse`
-    (void $ waitSTMThrow right)
+    (void $ waitThrowSTM right)
 
 -- | Like 'waitEitherThow', but also 'cancel's both @Async@s before
 -- returning.
@@ -274,10 +297,10 @@ waitEitherThrowCancel left right =
 waitBothThrow :: Async a -> Async b -> IO (a,b)
 waitBothThrow left right =
   atomically $ do
-    a <- waitSTMThrow left
+    a <- waitThrowSTM left
            `orElse`
-         (waitSTMThrow right >> retry)
-    b <- waitSTMThrow right
+         (waitThrowSTM right >> retry)
+    b <- waitThrowSTM right
     return (a,b)
 
 
