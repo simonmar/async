@@ -22,6 +22,9 @@ tests = [
   , testCase "async_exwaitThrow" async_exwaitThrow
   , testCase "withasync_wait"    withasync_wait
   , testCase "withasync_wait2"   withasync_wait2
+  , testGroup "async_cancel_rep" $
+      replicate 1000 $
+         testCase "async_cancel"       async_cancel
  ]
 
 value = 42 :: Int
@@ -71,3 +74,12 @@ withasync_wait2 = do
   case r of
     Left e  -> fromException e @?= Just ThreadKilled
     Right _ -> assertFailure ""
+
+async_cancel :: Assertion
+async_cancel = do
+  a <- async (return value)
+  cancelWith a TestException
+  r <- wait a
+  case r of
+    Left e -> fromException e @?= Just TestException
+    Right r -> r @?= value
