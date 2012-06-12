@@ -10,6 +10,8 @@ import Control.Concurrent.Async
 import Control.Exception
 import Data.Typeable
 import Control.Concurrent
+import Control.Monad
+import Data.Maybe
 
 import Prelude hiding (catch)
 
@@ -25,6 +27,8 @@ tests = [
   , testGroup "async_cancel_rep" $
       replicate 1000 $
          testCase "async_cancel"       async_cancel
+  , testCase "async_poll"        async_poll
+  , testCase "async_poll2"       async_poll2
  ]
 
 value = 42 :: Int
@@ -83,3 +87,20 @@ async_cancel = do
   case r of
     Left e -> fromException e @?= Just TestException
     Right r -> r @?= value
+
+async_poll :: Assertion
+async_poll = do
+  a <- async (threadDelay 1000000)
+  r <- poll a
+  when (isJust r) $ assertFailure ""
+  r <- poll a   -- poll twice, just to check we don't deadlock
+  when (isJust r) $ assertFailure ""
+
+async_poll2 :: Assertion
+async_poll2 = do
+  a <- async (return value)
+  wait a
+  r <- poll a
+  when (isNothing r) $ assertFailure ""
+  r <- poll a   -- poll twice, just to check we don't deadlock
+  when (isNothing r) $ assertFailure ""
