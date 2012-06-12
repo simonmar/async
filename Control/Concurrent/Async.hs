@@ -75,10 +75,10 @@ module Control.Concurrent.Async (
 
     -- * Asynchronous actions
     Async, async, withAsync, asyncThreadId,
-    wait, tryWait, waitThrow, cancel, cancelWith,
+    wait, poll, waitThrow, cancel, cancelWith,
 
     -- ** STM operations
-    waitSTM, tryWaitSTM, waitThrowSTM,
+    waitSTM, pollSTM, waitThrowSTM,
 
     -- ** Waiting for multiple 'Async's
     waitAny, waitAnyCancel, waitAnyThrow, waitAnyThrowCancel,
@@ -171,11 +171,11 @@ wait = atomically . waitSTM
 -- is @Just e@ where @e@ is @Left x@ if the @Async@ raised an
 -- exception @x@, or @Right a@ if it returned a value @a@.
 --
--- > wait = atomically . tryWaitSTM
+-- > poll = atomically . pollSTM
 --
-{-# INLINE tryWait #-}
-tryWait :: Async a -> IO (Maybe (Either SomeException a))
-tryWait = atomically . tryWaitSTM
+{-# INLINE poll #-}
+poll :: Async a -> IO (Maybe (Either SomeException a))
+poll = atomically . pollSTM
 
 -- | A version of 'wait' that throws the exception if the asynchronous
 -- action raised one, or otherwise returns its result.
@@ -192,11 +192,11 @@ waitThrow = atomically . waitThrowSTM
 waitSTM :: Async a -> STM (Either SomeException a)
 waitSTM (Async _ var) = readTMVar var
 
--- | A version of 'tryWait' that can be used inside an STM transaction.
+-- | A version of 'poll' that can be used inside an STM transaction.
 --
-{-# INLINE tryWaitSTM #-}
-tryWaitSTM :: Async a -> STM (Maybe (Either SomeException a))
-tryWaitSTM (Async _ var) = tryReadTMVar var
+{-# INLINE pollSTM #-}
+pollSTM :: Async a -> STM (Maybe (Either SomeException a))
+pollSTM (Async _ var) = tryReadTMVar var
 
 -- | A version of 'waitThrow' that can be used inside an STM transaction.
 --
@@ -207,6 +207,7 @@ waitThrowSTM (Async _ var) = do
 
 -- | Cancel an asynchronous action by throwing the @ThreadKilled@
 -- exception to it.  Has no effect if the 'Async' has already
+-- completed.
 --
 -- > cancel a = throwTo (asyncThreadId a) ThreadKilled
 --
