@@ -62,18 +62,25 @@
 -- that children are automatically killed if their parents die for any
 -- reason.
 --
+-- The pattern of performing two IO actions concurrently and waiting
+-- for their results is packaged up in a combinator 'concurrently', so
+-- we can further shorten the above example to:
+--
+-- >       (page1, page2) <- concurrently (getURL url1) (getURL url2)
+-- >       ...
+
 -----------------------------------------------------------------------------
 
 module Control.Concurrent.Async (
 
-    -- * Async
+    -- * Asynchronous actions
     Async, async, withAsync, asyncThreadId,
     wait, tryWait, waitThrow, cancel, cancelWith,
 
     -- ** STM operations
     waitSTM, tryWaitSTM, waitThrowSTM,
 
-    -- ** Waiting for multiple asyncs
+    -- ** Waiting for multiple 'Async's
     waitAny, waitAnyCancel, waitAnyThrow, waitAnyThrowCancel,
     waitEither, waitEitherCancel, waitEitherThrow,
     waitEitherThrow_, waitEitherThrowCancel,
