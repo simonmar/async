@@ -204,7 +204,15 @@ waitCatchSTM (Async _ var) = readTMVar var
 --
 {-# INLINE pollSTM #-}
 pollSTM :: Async a -> STM (Maybe (Either SomeException a))
+#if MIN_VERSION_stm(2,3,0)
 pollSTM (Async _ var) = tryReadTMVar var
+#else
+pollSTM (Async _ var) = do
+  r <- tryTakeTMVar var
+  case r of
+    Nothing -> return Nothing
+    Just x  -> do putTMVar var x; return (Just x)
+#endif
 
 -- | Cancel an asynchronous action by throwing the @ThreadKilled@
 -- exception to it.  Has no effect if the 'Async' has already
