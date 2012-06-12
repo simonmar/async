@@ -17,10 +17,10 @@ main = defaultMain tests
 
 tests = [
     testCase "async_wait"        async_wait
-  , testCase "async_waitThrow"   async_waitThrow
+  , testCase "async_waitCatch"   async_waitCatch
   , testCase "async_exwait"      async_exwait
-  , testCase "async_exwaitThrow" async_exwaitThrow
-  , testCase "withasync_wait"    withasync_wait
+  , testCase "async_exwaitCatch" async_exwaitCatch
+  , testCase "withasync_waitCatch" withasync_waitCatch
   , testCase "withasync_wait2"   withasync_wait2
   , testGroup "async_cancel_rep" $
       replicate 1000 $
@@ -32,37 +32,37 @@ value = 42 :: Int
 data TestException = TestException deriving (Eq,Show,Typeable)
 instance Exception TestException
 
-async_wait :: Assertion
-async_wait = do
+async_waitCatch :: Assertion
+async_waitCatch = do
   a <- async (return value)
-  r <- wait a
+  r <- waitCatch a
   case r of
     Left _  -> assertFailure ""
     Right e -> e @?= value
 
-async_waitThrow :: Assertion
-async_waitThrow = do
+async_wait :: Assertion
+async_wait = do
   a <- async (return value)
-  r <- waitThrow a
-  assertEqual "async_waitThrow" r value
-
-async_exwait :: Assertion
-async_exwait = do
-  a <- async (throwIO TestException)
   r <- wait a
+  assertEqual "async_wait" r value
+
+async_exwaitCatch :: Assertion
+async_exwaitCatch = do
+  a <- async (throwIO TestException)
+  r <- waitCatch a
   case r of
     Left e  -> fromException e @?= Just TestException
     Right _ -> assertFailure ""
 
-async_exwaitThrow :: Assertion
-async_exwaitThrow = do
+async_exwait :: Assertion
+async_exwait = do
   a <- async (throwIO TestException)
-  (waitThrow a >> assertFailure "") `catch` \e -> e @?= TestException
+  (wait a >> assertFailure "") `catch` \e -> e @?= TestException
 
-withasync_wait :: Assertion
-withasync_wait = do
+withasync_waitCatch :: Assertion
+withasync_waitCatch = do
   withAsync (return value) $ \a -> do
-    r <- wait a
+    r <- waitCatch a
     case r of
       Left _  -> assertFailure ""
       Right e -> e @?= value
@@ -70,7 +70,7 @@ withasync_wait = do
 withasync_wait2 :: Assertion
 withasync_wait2 = do
   a <- withAsync (threadDelay 1000000) $ return
-  r <- wait a
+  r <- waitCatch a
   case r of
     Left e  -> fromException e @?= Just ThreadKilled
     Right _ -> assertFailure ""
@@ -79,7 +79,7 @@ async_cancel :: Assertion
 async_cancel = do
   a <- async (return value)
   cancelWith a TestException
-  r <- wait a
+  r <- waitCatch a
   case r of
     Left e -> fromException e @?= Just TestException
     Right r -> r @?= value
