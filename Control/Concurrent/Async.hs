@@ -141,6 +141,9 @@ async action = do
 -- This is a useful variant of 'async' that ensures an @Async@ is
 -- never left running unintentionally.
 --
+-- Since 'cancel' may block, 'withAsync' may also block; see 'cancel'
+-- for details.
+--
 withAsync :: IO a -> (Async a -> IO b) -> IO b
 -- The bracket version works, but is slow.  We can do better by
 -- hand-coding it:
@@ -204,7 +207,17 @@ waitThrowSTM (Async _ var) = do
 
 -- | Cancel an asynchronous action by throwing the @ThreadKilled@
 -- exception to it.  Has no effect if the 'Async' has already
--- completed.
+--
+-- > cancel a = throwTo (asyncThreadId a) ThreadKilled
+--
+-- Note that 'cancel' is synchronous in the same sense as 'throwTo'.
+-- It does not return until the exception has been thrown in the
+-- target thread, or the target thread has completed.  In particular,
+-- if the target thread is making a foreign call, the exception will
+-- not be thrown until the foreign call returns, and in this case
+-- 'cancel' may block indefinitely.  An asynchronous 'cancel' can
+-- of course be obtained by wrapping 'cancel' itself in 'async'.
+--
 {-# INLINE cancel #-}
 cancel :: Async a -> IO ()
 cancel (Async t _) = throwTo t ThreadKilled
@@ -212,6 +225,10 @@ cancel (Async t _) = throwTo t ThreadKilled
 -- | Cancel an asynchronous action by throwing the supplied exception
 -- to it.
 --
+-- > cancelWith a x = throwTo (asyncThreadId a) x
+--
+-- The notes about the synchronous nature of 'cancel' also apply to
+-- 'cancelWith'.
 cancelWith :: Exception e => Async a -> e -> IO ()
 cancelWith (Async t _) e = throwTo t e
 
