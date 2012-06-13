@@ -56,10 +56,9 @@
 -- automatically killed rather than being left to run in the
 -- background, possibly indefinitely.  This is the second way that the
 -- library provides additional safety: using 'withAsync' means we can
--- avoid accidentally leaving threads running.
---
--- Furthermore, 'withAsync' allows a tree of threads to be built, such
--- that children are automatically killed if their parents die for any
+-- avoid accidentally leaving threads running.  Furthermore,
+-- 'withAsync' allows a tree of threads to be built, such that
+-- children are automatically killed if their parents die for any
 -- reason.
 --
 -- The pattern of performing two IO actions concurrently and waiting
@@ -114,6 +113,7 @@ import GHC.Conc
 -- complete and obtaining their results (see e.g. 'wait').
 --
 data Async a = Async { asyncThreadId :: {-# UNPACK #-} !ThreadId
+                       -- ^ Returns the 'ThreadId' of the thread running the given 'Async'.
                      , _asyncVar     :: {-# UNPACK #-} !(TMVar (Either SomeException a)) }
 
 instance Eq (Async a) where
@@ -263,7 +263,7 @@ waitAnyCatchCancel asyncs =
   waitAnyCatch asyncs `finally` mapM_ cancel asyncs
 
 -- | Wait for any of the supplied @Async@s to complete.  If the first
--- to complete throw an exception, then that exception is re-thrown
+-- to complete throws an exception, then that exception is re-thrown
 -- by 'waitAny'.
 --
 -- If multiple 'Async's complete or have completed, then the value
@@ -292,7 +292,7 @@ waitEitherCatch left right =
       `orElse`
     (Right <$> waitCatchSTM right)
 
--- | Like 'waitEither', but also 'cancel's both @Async@s before
+-- | Like 'waitEitherCatch', but also 'cancel's both @Async@s before
 -- returning.
 --
 waitEitherCatchCancel :: Async a -> Async b
@@ -312,7 +312,7 @@ waitEither left right =
       `orElse`
     (Right <$> waitSTM right)
 
--- | Like 'waitEither', but the results are ignored.
+-- | Like 'waitEither', but the result is ignored.
 --
 waitEither_ :: Async a -> Async b -> IO ()
 waitEither_ left right =
