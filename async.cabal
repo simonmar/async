@@ -14,8 +14,8 @@ description:
  .
  * When waiting for a thread to return a result,
    if the thread dies with an exception then the
-   caller must either handle the exception
-   ('wait') or re-throw it ('waitThrow'); the
+   caller must either re-throw the exception
+   ('wait') or handle it ('waitCatch'); the
    exception cannot be ignored.
  .
  * The API makes it possible to build a tree of
