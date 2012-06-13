@@ -31,10 +31,17 @@ copyright:           (c) Simon Marlow 2012
 category:            Concurrency
 build-type:          Simple
 cabal-version:       >=1.8
+homepage:            https://github.com/simonmar/async
+bug-reports:         https://github.com/simonmar/async/issues
+tested-with:         GHC==7.0.3, GHC==7.2.2, GHC==7.4.1
+
+source-repository head
+    type: git
+    location: https://github.com/simonmar/async.git
 
 library
-  exposed-modules:     Control.Concurrent.Async
-  build-depends:       base >= 4.3 && < 4.6, stm >= 2.2 && < 2.4
+    exposed-modules:     Control.Concurrent.Async
+    build-depends:       base >= 4.3 && < 4.6, stm >= 2.2 && < 2.4
 
 test-suite test-async
     type:       exitcode-stdio-1.0
