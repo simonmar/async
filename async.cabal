@@ -35,6 +35,9 @@ homepage:            https://github.com/simonmar/async
 bug-reports:         https://github.com/simonmar/async/issues
 tested-with:         GHC==7.0.3, GHC==7.2.2, GHC==7.4.1
 
+extra-source-files:
+    bench/race.hs
+
 source-repository head
     type: git
     location: https://github.com/simonmar/async.git
