@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, MagicHash, UnboxedTuples #-}
+{-# LANGUAGE CPP, MagicHash, UnboxedTuples, RankNTypes #-}
 {-# OPTIONS -Wall #-}
 
 -----------------------------------------------------------------------------
@@ -73,7 +73,15 @@
 module Control.Concurrent.Async (
 
     -- * Asynchronous actions
-    Async, async, withAsync, asyncThreadId,
+    Async,
+    -- ** Spawning
+    async, asyncBound, asyncOn, asyncWithUnmask, asyncOnWithUnmask,
+
+    -- ** Spawning with automatic 'cancel'ation
+    withAsync, withAsyncBound, withAsyncOn, withAsyncWithUnmask, withAsyncOnWithUnmask,
+
+    -- ** Quering 'Async's
+    asyncThreadId,
     wait, poll, waitCatch, cancel, cancelWith,
 
     -- ** STM operations
@@ -124,12 +132,34 @@ instance Ord (Async a) where
 
 -- | Spawn an asynchronous action in a separate thread.
 async :: IO a -> IO (Async a)
-async action = do
+async = asyncUsing rawForkIO
+
+-- | Like 'async' but using 'forkOS' internally.
+asyncBound :: IO a -> IO (Async a)
+asyncBound = asyncUsing forkOS
+
+-- | Like 'async' but using 'forkOn' internally.
+asyncOn :: Int -> IO a -> IO (Async a)
+asyncOn = asyncUsing . rawForkOn
+
+-- | Like 'async' but using 'forkIOWithUnmask' internally.
+-- The child thread is passed a function that can be used to unmask asynchronous exceptions.
+asyncWithUnmask :: ((forall b . IO b -> IO b) -> IO a) -> IO (Async a)
+asyncWithUnmask actionWith = asyncUsing rawForkIO (actionWith unsafeUnmask)
+
+-- | Like 'asyncOn' but using 'forkOnWithUnmask' internally.
+-- The child thread is passed a function that can be used to unmask asynchronous exceptions.
+asyncOnWithUnmask :: Int -> ((forall b . IO b -> IO b) -> IO a) -> IO (Async a)
+asyncOnWithUnmask cpu actionWith = asyncUsing (rawForkOn cpu) (actionWith unsafeUnmask)
+
+asyncUsing :: (IO () -> IO ThreadId)
+           -> IO a -> IO (Async a)
+asyncUsing doFork = \action -> do
    var <- newEmptyTMVarIO
    -- t <- forkFinally action (\r -> atomically $ putTMVar var r)
    -- slightly faster:
    t <- mask $ \restore ->
-          rawForkIO $ do r <- try (restore action); atomically $ putTMVar var r
+          doFork $ try (restore action) >>= atomically . putTMVar var
    return (Async t var)
 
 -- | Spawn an asynchronous action in a separate thread, and pass its
@@ -145,12 +175,34 @@ async action = do
 -- for details.
 --
 withAsync :: IO a -> (Async a -> IO b) -> IO b
+withAsync = withAsyncUsing rawForkIO
+
+-- | Like 'withAsync' but uses 'forkOS' internally.
+withAsyncBound :: IO a -> (Async a -> IO b) -> IO b
+withAsyncBound = withAsyncUsing forkOS
+
+-- | Like 'withAsync' but uses 'forkOn' internally.
+withAsyncOn :: Int -> IO a -> (Async a -> IO b) -> IO b
+withAsyncOn = withAsyncUsing . rawForkOn
+
+-- | Like 'withAsync' but uses 'forkIOWithUnmask' internally.
+-- The child thread is passed a function that can be used to unmask asynchronous exceptions.
+withAsyncWithUnmask :: ((forall c. IO c -> IO c) -> IO a) -> (Async a -> IO b) -> IO b
+withAsyncWithUnmask actionWith = withAsyncUsing rawForkIO (actionWith unsafeUnmask)
+
+-- | Like 'withAsyncOn' but uses 'forkOnWithUnmask' internally.
+-- The child thread is passed a function that can be used to unmask asynchronous exceptions
+withAsyncOnWithUnmask :: Int -> ((forall c. IO c -> IO c) -> IO a) -> (Async a -> IO b) -> IO b
+withAsyncOnWithUnmask cpu actionWith = withAsyncUsing (rawForkOn cpu) (actionWith unsafeUnmask)
+
+withAsyncUsing :: (IO () -> IO ThreadId)
+               -> IO a -> (Async a -> IO b) -> IO b
 -- The bracket version works, but is slow.  We can do better by
 -- hand-coding it:
-withAsync action inner = do
+withAsyncUsing doFork = \action inner -> do
   var <- newEmptyTMVarIO
   mask $ \restore -> do
-    t <- rawForkIO $ try (restore action) >>= \r -> atomically $ putTMVar var r
+    t <- doFork $ try (restore action) >>= atomically . putTMVar var
     let a = Async t var
     r <- restore (inner a) `catchAll` \e -> do cancel a; throwIO e
     cancel a
@@ -487,3 +539,8 @@ tryAll = try
 rawForkIO :: IO () -> IO ThreadId
 rawForkIO action = IO $ \ s ->
    case (fork# action s) of (# s1, tid #) -> (# s1, ThreadId tid #)
+
+{-# INLINE rawForkOn #-}
+rawForkOn :: Int -> IO () -> IO ThreadId
+rawForkOn (I# cpu) action = IO $ \ s ->
+   case (forkOn# cpu action s) of (# s1, tid #) -> (# s1, ThreadId tid #)
