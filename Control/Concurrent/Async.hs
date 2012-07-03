@@ -106,7 +106,9 @@ module Control.Concurrent.Async (
     link, link2,
 
     -- * Convenient utilities
-    race, race_, concurrently,
+    race, race_, concurrently, mapConcurrently,
+    Concurrently(..),
+
   ) where
 
 import Control.Concurrent.STM
@@ -115,6 +117,7 @@ import Control.Concurrent
 import Prelude hiding (catch)
 import Control.Monad
 import Control.Applicative
+import Data.Traversable
 
 import GHC.Exts
 import GHC.IO hiding (finally, onException)
@@ -424,7 +427,6 @@ link2 left@(Async tl _)  right@(Async tr _) =
       _ -> return ()
 
 
-
 -- -----------------------------------------------------------------------------
 
 -- | Run two @IO@ actions concurrently, and return the first to
@@ -515,6 +517,51 @@ concurrently' left right collect = do
         return r
 
 #endif
+
+-- | maps an @IO@-performing function over any @Traversable@ data
+-- type, performing all the @IO@ actions concurrently, and returning
+-- the original data structure with the arguments replaced by the
+-- results.
+--
+-- For example, @mapConcurrently@ works with lists:
+--
+-- > pages <- mapConcurrently getURL ["url1", "url2", "url3"]
+--
+mapConcurrently :: Traversable t => (a -> IO b) -> t a -> IO (t b)
+mapConcurrently f = runConcurrently . traverse (Concurrently . f)
+
+-- -----------------------------------------------------------------------------
+
+-- | A value of type @Concurrently a@ is an @IO@ operation that can be
+-- composed with other @Concurrently@ values, using the @Applicative@
+-- and @Alternative@ instances.
+--
+-- Calling @runConcurrently@ on a value of type @Concurrently a@ will
+-- execute the @IO@ operations it contains concurrently, before
+-- delivering the result of type @a@.
+--
+-- For example
+--
+-- > (page1, page2, page3)
+-- >     <- runConcurrently $ (,,)
+-- >     <$> Concurrently (getURL "url1")
+-- >     <*> Concurrently (getURL "url2")
+-- >     <*> Concurrently (getURL "url3")
+--
+newtype Concurrently a = Concurrently { runConcurrently :: IO a }
+
+instance Functor Concurrently where
+  fmap f (Concurrently a) = Concurrently $ f <$> a
+
+instance Applicative Concurrently where
+  pure = Concurrently . return
+  Concurrently fs <*> Concurrently as =
+    Concurrently $ (\(f, a) -> f a) <$> concurrently fs as
+
+instance Alternative Concurrently where
+  empty = Concurrently $ forever (threadDelay maxBound)
+  Concurrently as <|> Concurrently bs =
+    Concurrently $ either id id <$> race as bs
 
 -- ----------------------------------------------------------------------------
 
