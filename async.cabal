@@ -27,6 +27,10 @@ description:
  * Added a @Functor@ instance for @Async@
  .
  * Added @asyncBound@, @asyncOn@, @asyncWithUnmask@, @asyncOnWithUnmask@, @withAsyncBound@, @withAsyncOn@, @withAsyncWithUnmask@, @withAsyncOnWithUnmask@.
+ .
+ * Added @mapConcurrently@
+ .
+ * Added @Concurrently@ (with @Applicative@ and @Alternative@ instances)
 
 version:             2.0.1.0
 license:             BSD3
