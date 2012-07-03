@@ -5,4 +5,9 @@ import Control.Concurrent
 
 main = runInUnboundThread $ do
   [n] <- fmap (fmap read) getArgs
-  replicateM_ n $ race (return 1) (return 2)
+  replicateM_ n $ concurrently' (return 1) (return 2)
+
+concurrently' left right =
+  withAsync left $ \a ->
+  withAsync right $ \b ->
+  waitBoth a b
