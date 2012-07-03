@@ -22,7 +22,7 @@ description:
    threads that are automatically killed when
    their parent dies (see 'withAsync').
 
-version:             2.0.0.0
+version:             2.0.1.0
 license:             BSD3
 license-file:        LICENSE
 author:              Simon Marlow
