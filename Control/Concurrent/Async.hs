@@ -67,6 +67,15 @@
 --
 -- >       (page1, page2) <- concurrently (getURL url1) (getURL url2)
 -- >       ...
+--
+-- The 'Functor' instance can be used to change the result of an
+-- 'Async'.  For example:
+--
+-- > ghci> a <- async (return 3)
+-- > ghci> wait a
+-- > 3
+-- > ghci> wait (fmap (+1) a)
+-- > 4
 
 -----------------------------------------------------------------------------
 
