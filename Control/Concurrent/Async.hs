@@ -122,13 +122,16 @@ import GHC.Conc
 --
 data Async a = Async { asyncThreadId :: {-# UNPACK #-} !ThreadId
                        -- ^ Returns the 'ThreadId' of the thread running the given 'Async'.
-                     , _asyncVar     :: {-# UNPACK #-} !(TMVar (Either SomeException a)) }
+                     , _asyncWait    :: STM (Either SomeException a) }
 
 instance Eq (Async a) where
   Async a _ == Async b _  =  a == b
 
 instance Ord (Async a) where
   Async a _ `compare` Async b _  =  a `compare` b
+
+instance Functor Async where
+  fmap f (Async a w) = Async a (fmap (fmap f) w)
 
 -- | Spawn an asynchronous action in a separate thread.
 async :: IO a -> IO (Async a)
@@ -160,7 +163,7 @@ asyncUsing doFork = \action -> do
    -- slightly faster:
    t <- mask $ \restore ->
           doFork $ try (restore action) >>= atomically . putTMVar var
-   return (Async t var)
+   return (Async t (readTMVar var))
 
 -- | Spawn an asynchronous action in a separate thread, and pass its
 -- @Async@ handle to the supplied function.  When the function returns
@@ -203,7 +206,7 @@ withAsyncUsing doFork = \action inner -> do
   var <- newEmptyTMVarIO
   mask $ \restore -> do
     t <- doFork $ try (restore action) >>= atomically . putTMVar var
-    let a = Async t var
+    let a = Async t (readTMVar var)
     r <- restore (inner a) `catchAll` \e -> do cancel a; throwIO e
     cancel a
     return r
@@ -242,29 +245,21 @@ poll = atomically . pollSTM
 -- | A version of 'wait' that can be used inside an STM transaction.
 --
 waitSTM :: Async a -> STM a
-waitSTM (Async _ var) = do
-   r <- readTMVar var
+waitSTM a = do
+   r <- waitCatchSTM a
    either throwSTM return r
 
 -- | A version of 'waitCatch' that can be used inside an STM transaction.
 --
 {-# INLINE waitCatchSTM #-}
 waitCatchSTM :: Async a -> STM (Either SomeException a)
-waitCatchSTM (Async _ var) = readTMVar var
+waitCatchSTM (Async _ w) = w
 
 -- | A version of 'poll' that can be used inside an STM transaction.
 --
 {-# INLINE pollSTM #-}
 pollSTM :: Async a -> STM (Maybe (Either SomeException a))
-#if MIN_VERSION_stm(2,3,0)
-pollSTM (Async _ var) = tryReadTMVar var
-#else
-pollSTM (Async _ var) = do
-  r <- tryTakeTMVar var
-  case r of
-    Nothing -> return Nothing
-    Just x  -> do putTMVar var x; return (Just x)
-#endif
+pollSTM (Async _ w) = (Just <$> w) `orElse` return Nothing
 
 -- | Cancel an asynchronous action by throwing the @ThreadKilled@
 -- exception to it.  Has no effect if the 'Async' has already
@@ -399,10 +394,10 @@ waitBoth left right =
 -- the current thread.
 --
 link :: Async a -> IO ()
-link (Async _ var) = do
+link (Async _ w) = do
   me <- myThreadId
   void $ forkRepeat $ do
-     r <- atomically $ readTMVar var
+     r <- atomically $ w
      case r of
        Left e -> throwTo me e
        _ -> return ()
