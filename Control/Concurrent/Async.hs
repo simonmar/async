@@ -90,8 +90,8 @@ module Control.Concurrent.Async (
     withAsync, withAsyncBound, withAsyncOn, withAsyncWithUnmask, withAsyncOnWithUnmask,
 
     -- ** Quering 'Async's
-    asyncThreadId,
     wait, poll, waitCatch, cancel, cancelWith,
+    asyncThreadId,
 
     -- ** STM operations
     waitSTM, pollSTM, waitCatchSTM,
