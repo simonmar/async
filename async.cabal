@@ -21,6 +21,12 @@ description:
  * The API makes it possible to build a tree of
    threads that are automatically killed when
    their parent dies (see 'withAsync').
+ .
+ Changes in 2.0.1.0:
+ .
+ * Added a @Functor@ instance for @Async@
+ .
+ * Added @asyncBound@, @asyncOn@, @asyncWithUnmask@, @asyncOnWithUnmask@, @withAsyncBound@, @withAsyncOn@, @withAsyncWithUnmask@, @withAsyncOnWithUnmask@.
 
 version:             2.0.1.0
 license:             BSD3
