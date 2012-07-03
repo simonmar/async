@@ -132,7 +132,7 @@ instance Ord (Async a) where
 
 -- | Spawn an asynchronous action in a separate thread.
 async :: IO a -> IO (Async a)
-async = asyncUsing rawForkIO
+async = inline asyncUsing rawForkIO
 
 -- | Like 'async' but using 'forkOS' internally.
 asyncBound :: IO a -> IO (Async a)
@@ -175,7 +175,7 @@ asyncUsing doFork = \action -> do
 -- for details.
 --
 withAsync :: IO a -> (Async a -> IO b) -> IO b
-withAsync = withAsyncUsing rawForkIO
+withAsync = inline withAsyncUsing rawForkIO
 
 -- | Like 'withAsync' but uses 'forkOS' internally.
 withAsyncBound :: IO a -> (Async a -> IO b) -> IO b
