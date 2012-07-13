@@ -22,6 +22,10 @@ description:
    threads that are automatically killed when
    their parent dies (see 'withAsync').
  .
+ Changes in 2.0.1.1:
+ .
+ * Safe Haskell support: @Control.Concurrent.Async@ is now @Trustworthy@
+ .
  Changes in 2.0.1.0:
  .
  * Added a @Functor@ instance for @Async@
@@ -32,7 +36,7 @@ description:
  .
  * Added @Concurrently@ (with @Applicative@ and @Alternative@ instances)
 
-version:             2.0.1.0
+version:             2.0.1.1
 license:             BSD3
 license-file:        LICENSE
 author:              Simon Marlow

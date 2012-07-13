@@ -1,4 +1,7 @@
 {-# LANGUAGE CPP, MagicHash, UnboxedTuples, RankNTypes #-}
+#if __GLASGOW_HASKELL__ >= 701
+{-# LANGUAGE Trustworthy #-}
+#endif
 {-# OPTIONS -Wall #-}
 
 -----------------------------------------------------------------------------
