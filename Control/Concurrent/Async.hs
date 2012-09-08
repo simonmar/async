@@ -117,7 +117,9 @@ module Control.Concurrent.Async (
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Concurrent
+#if !MIN_VERSION_base(4,6,0)
 import Prelude hiding (catch)
+#endif
 import Control.Monad
 import Control.Applicative
 import Data.Traversable
