@@ -22,6 +22,10 @@ description:
    threads that are automatically killed when
    their parent dies (see 'withAsync').
  .
+ Changes in 2.0.1.3:
+ .
+ * Bump @base@ dependency to allow 4.6
+ .
  Changes in 2.0.1.2:
  .
  * Bump @stm@ dependency to 2.4
@@ -40,7 +44,7 @@ description:
  .
  * Added @Concurrently@ (with @Applicative@ and @Alternative@ instances)
 
-version:             2.0.1.2
+version:             2.0.1.3
 license:             BSD3
 license-file:        LICENSE
 author:              Simon Marlow
@@ -62,7 +66,7 @@ source-repository head
 
 library
     exposed-modules:     Control.Concurrent.Async
-    build-depends:       base >= 4.3 && < 4.6, stm >= 2.2 && < 2.5
+    build-depends:       base >= 4.3 && < 4.7, stm >= 2.2 && < 2.5
 
 test-suite test-async
     type:       exitcode-stdio-1.0
