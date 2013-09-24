@@ -456,6 +456,7 @@ race_ :: IO a -> IO b -> IO ()
 -- > concurrently left right =
 -- >   withAsync left $ \a ->
 -- >   withAsync right $ \b ->
+-- >   link2 a b
 -- >   waitBoth a b
 concurrently :: IO a -> IO b -> IO (a,b)
 
@@ -476,6 +477,7 @@ race_ left right =
 concurrently left right =
   withAsync left $ \a ->
   withAsync right $ \b ->
+  link2 a b
   waitBoth a b
 
 #else
@@ -484,43 +486,33 @@ concurrently left right =
 -- More ugly than the Async versions, but quite a bit faster.
 
 -- race :: IO a -> IO b -> IO (Either a b)
-race left right = concurrently' left right collect
-  where
-    collect m = do
-        e <- takeMVar m
-        case e of
-            Left ex -> throwIO ex
-            Right r -> return r
+race left right = do
+  done <- newEmptyMVar
+  mask $ \restore -> do
+    lid <- forkIO $ restore (left >>= putMVar done . Right . Left)
+                         `catchAll` (putMVar done . Left)
+    rid <- forkIO $ restore (right >>= putMVar done . Right . Right)
+                         `catchAll` (putMVar done . Left)
+    let stop = killThread lid >> killThread rid
+    r <- restore (takeMVar done >>= either throwIO return)
+           `onException` stop
+    stop
+    return r
 
 -- race_ :: IO a -> IO b -> IO ()
 race_ left right = void $ race left right
 
 -- concurrently :: IO a -> IO b -> IO (a,b)
-concurrently left right = concurrently' left right (collect [])
+concurrently left right = do
+  mv <- newEmptyMVar
+  myTid <- myThreadId
+  mask $ \restore -> do
+    tid <- forkIO $ restore right `throwAllExceptionsTo` myTid >>= putMVar mv
+    l <- restore left `throwAllExceptionsTo` tid
+    r <- takeMVar mv
+    return (l, r)
   where
-    collect [Left a, Right b] _ = return (a,b)
-    collect [Right b, Left a] _ = return (a,b)
-    collect xs m = do
-        e <- takeMVar m
-        case e of
-            Left ex -> throwIO ex
-            Right r -> collect (r:xs) m
-
-concurrently' :: IO a -> IO b
-             -> (MVar (Either SomeException (Either a b)) -> IO r)
-             -> IO r
-concurrently' left right collect = do
-    done <- newEmptyMVar
-    mask $ \restore -> do
-        lid <- forkIO $ restore (left >>= putMVar done . Right . Left)
-                             `catchAll` (putMVar done . Left)
-        rid <- forkIO $ restore (right >>= putMVar done . Right . Right)
-                             `catchAll` (putMVar done . Left)
-        let stop = killThread lid >> killThread rid
-        r <- restore (collect done) `onException` stop
-        stop
-        return r
-
+    m `throwAllExceptionsTo` tid = m `catchAll` (\e -> throwTo tid e >> throwIO e)
 #endif
 
 -- | maps an @IO@-performing function over any @Traversable@ data
