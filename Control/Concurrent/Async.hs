@@ -100,6 +100,7 @@ module Control.Concurrent.Async (
     waitSTM, pollSTM, waitCatchSTM,
 
     -- ** Waiting for multiple 'Async's
+    waitAll, -- TODO implement waitAllCatch, waitAllCancel, waitAllCatchCancel
     waitAny, waitAnyCatch, waitAnyCancel, waitAnyCatchCancel,
     waitEither, waitEitherCatch, waitEitherCancel, waitEitherCatchCancel,
     waitEither_,
@@ -122,7 +123,7 @@ import Prelude hiding (catch)
 #endif
 import Control.Monad
 import Control.Applicative
-import Data.Traversable
+import Data.Traversable hiding (sequence)
 
 import GHC.Exts
 import GHC.IO hiding (finally, onException)
@@ -305,6 +306,14 @@ cancel (Async t _) = throwTo t ThreadKilled
 -- 'cancelWith'.
 cancelWith :: Exception e => Async a -> e -> IO ()
 cancelWith (Async t _) e = throwTo t e
+
+-- | Wait for all of the supplied asynchronous operations to complete.
+-- The value returned is a list of pair consisting of the 'Async' that completed, 
+-- and the result that would be returned by 'wait' on that 'Async'.
+--
+waitAll :: [Async a] -> IO [(Async a, a)]
+waitAll asyncs =
+  atomically . sequence $ map (\a -> do r <- waitSTM a; return (a, r)) asyncs
 
 -- | Wait for any of the supplied asynchronous operations to complete.
 -- The value returned is a pair of the 'Async' that completed, and the
