@@ -29,6 +29,7 @@ tests = [
          testCase "async_cancel"       async_cancel
   , testCase "async_poll"        async_poll
   , testCase "async_poll2"       async_poll2
+  , testCase "withasync_waitCatch_blocked" withasync_waitCatch_blocked
  ]
 
 value = 42 :: Int
@@ -104,3 +105,13 @@ async_poll2 = do
   when (isNothing r) $ assertFailure ""
   r <- poll a   -- poll twice, just to check we don't deadlock
   when (isNothing r) $ assertFailure ""
+
+withasync_waitCatch_blocked :: Assertion
+withasync_waitCatch_blocked = do
+  r <- withAsync (newEmptyMVar >>= takeMVar) waitCatch
+  case r of
+    Left e ->
+        case fromException e of
+            Just BlockedIndefinitelyOnMVar -> return ()
+            Nothing -> assertFailure $ show e
+    Right () -> assertFailure ""
