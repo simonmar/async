@@ -246,7 +246,10 @@ wait = atomically . waitSTM
 --
 {-# INLINE waitCatch #-}
 waitCatch :: Async a -> IO (Either SomeException a)
-waitCatch = atomically . waitCatchSTM
+waitCatch = tryAgain . atomically . waitCatchSTM
+  where
+    -- See: https://github.com/simonmar/async/issues/14
+    tryAgain f = f `catch` \BlockedIndefinitelyOnSTM -> f
 
 -- | Check whether an 'Async' has completed yet.  If it has not
 -- completed yet, then the result is @Nothing@, otherwise the result
