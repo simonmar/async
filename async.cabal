@@ -22,6 +22,10 @@ description:
    threads that are automatically killed when
    their parent dies (see 'withAsync').
  .
+ Changes in 2.0.1.6:
+ .
+ * Add workaround to waitCatch for #14
+ .
  Changes in 2.0.1.5:
  .
  * Bump @base@ dependencies for GHC 7.8
@@ -52,7 +56,7 @@ description:
  .
  * Added @Concurrently@ (with @Applicative@ and @Alternative@ instances)
 
-version:             2.0.1.5
+version:             2.0.1.6
 license:             BSD3
 license-file:        LICENSE
 author:              Simon Marlow
