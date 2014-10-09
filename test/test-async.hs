@@ -13,9 +13,7 @@ import Data.IORef
 import Control.Concurrent
 import Control.Monad
 import Data.Maybe
-#if MIN_VERSION_base(4,7,0)
 import System.Timeout
-#endif
 
 import Prelude hiding (catch)
 
