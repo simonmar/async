@@ -127,6 +127,7 @@ import Control.Applicative
 import Data.Traversable
 import Data.Typeable
 import Data.Unique
+import Unsafe.Coerce
 
 import GHC.Exts
 import GHC.IO hiding (finally, onException)
@@ -513,22 +514,13 @@ concurrently left right =
 --
 -- More concretely:
 --
--- * When @left@ terminates normally it puts its result in an MVar and throws
---   the 'InterruptRight' exception to the right thread.
+-- * When @left@ terminates, whether normally or by raising an
+--   exception, it wraps its result in the 'InterruptRight' exception
+--   and throws that to the right thread.
 --
--- * When @left@ terminates by an exception @e@ it throws the 'InterruptRight'
---   exception (containing the exception @e@) to the right thread.
---
--- * When the right thread catches the 'InterruptRight' exception it will check
---   for the optional exception thrown in the left thread and throw it if it's
---   there. When it's not there it means the left thread terminated normally and
---   the left result can be retrieved by taking the MVar.
---
---   Instead of putting the left result inside an MVar, another implementation
---   is to put the result in the 'InterruptRight' exception. The right thread
---   can then take out and return this result when it catches the exception.
---   This does require the use of 'unsafeCoerce' to trick the type-system which
---   is why I haven't used this approach.
+-- * When the right thread catches the 'InterruptRight' exception it
+--   will either throw the contained exception or return the left result
+--   normally.
 --
 -- * When @right@ terminates normally it throws an 'InterruptLeft' exception to
 --   the left thread in order to stop that thread from doing any more work.
@@ -554,25 +546,24 @@ concurrently left right =
 
 -- race :: IO a -> IO b -> IO (Either a b)
 race left right = do
-  leftResultMVar <- newEmptyMVar
   rightTid <- myThreadId
   u <- newUnique
   mask $ \restore -> do
     leftTid <- forkIO $
-      catch (do restore left >>= putMVar leftResultMVar
-                throwTo rightTid $ InterruptRight u Nothing) $ \e ->
+      catch (do l <- restore left
+                throwTo rightTid $ InterruptRight u $ Right l) $ \e ->
         case fromException e of
           Just (InterruptLeft u' rightEx) | u == u' -> throwIO rightEx
-          _ -> do throwTo rightTid $ InterruptRight u (Just e)
+          _ -> do throwTo rightTid $ InterruptRight u (Left e)
                   throwIO e
     catch (do r <- restore right
               throwTo leftTid $ InterruptLeft u ThreadKilled
               return $ Right r) $ \e ->
       case fromException e of
-        Just (InterruptRight u' mbEx) | u == u' ->
-          case mbEx of
-            Just leftEx -> throwIO leftEx
-            Nothing -> Left <$> takeMVar leftResultMVar
+        Just (InterruptRight u' leftResult) | u == u' ->
+          case leftResult of
+            Left ex -> throwIO ex
+            Right l -> return $ Left $ unsafeCoerce l
         _ -> do
           case fromException e of
 #           if MIN_VERSION_base(4,7,0)
@@ -598,7 +589,7 @@ instance Exception InterruptLeft where
     fromException = asyncExceptionFromException
 #endif
 
-data InterruptRight = InterruptRight Unique (Maybe SomeException)
+data InterruptRight = forall a. InterruptRight Unique (Either SomeException a)
                       deriving Typeable
 
 instance Show InterruptRight where
