@@ -515,23 +515,24 @@ concurrently left right =
 -- More concretely:
 --
 -- * When @left@ terminates, whether normally or by raising an
---   exception, it wraps its result in the 'InterruptRight' exception
---   and throws that to the right thread.
+--   exception, it wraps its result in the 'UniqueInterruptWithResult'
+--   exception and throws that to the right thread.
 --
--- * When the right thread catches the 'InterruptRight' exception it
---   will either throw the contained exception or return the left result
---   normally.
+-- * When the right thread catches the 'UniqueInterruptWithResult'
+--   exception it will either throw the contained exception or return
+--   the left result normally.
 --
 -- * When @right@ terminates, whether normally or by raising an
---   exception, it throws an 'InterruptLeft' exception to the left
+--   exception, it throws an 'UniqueInterrupt' exception to the left
 --   thread in order to stop that thread from doing any more work.
 --
 -- Because calls to @race@ can be nested it's important that different
--- 'InterruptLeft' or 'InterruptRight' exceptions are not mixed-up. For this
--- reason each call to @race@ creates a 'Unique' value that gets embedded in the
--- interrupt exceptions being thrown. When catching the interrupt exceptions we
--- check if the Unique equals the Unique of this invocation of @race@. (This is
--- the same trick used in the Timeout exception from System.Timeout).
+-- 'UniqueInterrupt' or 'UniqueInterruptWithResult' exceptions are not
+-- mixed-up. For this reason each call to @race@ creates a 'Unique'
+-- value that gets embedded in the interrupt exceptions being
+-- thrown. When catching the interrupt exceptions we check if the
+-- Unique equals the Unique of this invocation of @race@. (This is the
+-- same trick used in the Timeout exception from System.Timeout).
 
 -- race :: IO a -> IO b -> IO (Either a b)
 race left right = do
@@ -539,46 +540,24 @@ race left right = do
   u <- newUnique
   mask $ \restore -> do
     leftTid <- forkIO $
-      catch (do l <- restore left
-                throwTo rightTid $ InterruptRight u $ Right l) $ \e ->
+      catch
+        (do l <- restore left
+            throwTo rightTid $ UniqueInterruptWithResult u $ Right l) $ \e ->
         case fromException e of
-          Just (InterruptLeft u') | u == u' -> return ()
-          _ -> throwTo rightTid $ InterruptRight u (Left e)
-    catch (do r <- restore right
-              throwTo leftTid $ InterruptLeft u
-              return $ Right r) $ \e ->
+          Just (UniqueInterrupt u') | u == u' -> return ()
+          _ -> throwTo rightTid $ UniqueInterruptWithResult u (Left e)
+    catch
+      (do r <- restore right
+          throwTo leftTid $ UniqueInterrupt u
+          return $ Right r) $ \e ->
       case fromException e of
-        Just (InterruptRight u' leftResult) | u == u' ->
+        Just (UniqueInterruptWithResult u' leftResult) | u == u' ->
           case leftResult of
             Left ex -> throwIO ex
             Right l -> return $ Left $ unsafeCoerce l
         _ -> do
-          throwTo leftTid $ InterruptLeft u
+          throwTo leftTid $ UniqueInterrupt u
           throwIO e
-
-data InterruptLeft = InterruptLeft Unique
-                     deriving Typeable
-
-instance Show InterruptLeft where
-    show _ = "<< InterruptLeft >>"
-
-instance Exception InterruptLeft where
-#if MIN_VERSION_base(4,7,0)
-    toException = asyncExceptionToException
-    fromException = asyncExceptionFromException
-#endif
-
-data InterruptRight = forall a. InterruptRight Unique (Either SomeException a)
-                      deriving Typeable
-
-instance Show InterruptRight where
-    show _ = "<< InterruptRight >>"
-
-instance Exception InterruptRight where
-#if MIN_VERSION_base(4,7,0)
-    toException = asyncExceptionToException
-    fromException = asyncExceptionFromException
-#endif
 
 -- race_ :: IO a -> IO b -> IO ()
 race_ left right = void $ race left right
@@ -587,10 +566,55 @@ race_ left right = void $ race left right
 concurrently left right = do
     mv <- newEmptyMVar
     rightTid <- myThreadId
+    u <- newUnique
     mask $ \restore -> do
-      leftTid <- forkIO $ (restore left >>= putMVar mv)
-                            `catchAll` throwTo rightTid
-      (flip (,) <$> restore right <*> takeMVar mv) `alsoThrowingTo` leftTid
+      leftTid <- forkIO $ catch (restore left >>= putMVar mv) $ \e ->
+        case fromException e of
+          Just (UniqueInterrupt u') | u == u' -> return ()
+          _ -> throwTo rightTid $ UniqueInterruptWithSomeException u e
+      catch (flip (,) <$> restore right <*> takeMVar mv) $ \e ->
+          case fromException e of
+            Just (UniqueInterruptWithSomeException u' ex) | u == u' -> throwIO ex
+            _ -> do throwTo leftTid (UniqueInterrupt u)
+                    throwIO e
+
+data UniqueInterrupt = UniqueInterrupt Unique
+                     deriving Typeable
+
+instance Show UniqueInterrupt where
+    show _ = "<< UniqueInterrupt >>"
+
+instance Exception UniqueInterrupt where
+#if MIN_VERSION_base(4,7,0)
+    toException = asyncExceptionToException
+    fromException = asyncExceptionFromException
+#endif
+
+data UniqueInterruptWithResult =
+    forall a. UniqueInterruptWithResult Unique (Either SomeException a)
+    deriving Typeable
+
+instance Show UniqueInterruptWithResult where
+    show _ = "<< UniqueInterruptWithResult >>"
+
+instance Exception UniqueInterruptWithResult where
+#if MIN_VERSION_base(4,7,0)
+    toException = asyncExceptionToException
+    fromException = asyncExceptionFromException
+#endif
+
+data UniqueInterruptWithSomeException =
+    UniqueInterruptWithSomeException Unique SomeException
+    deriving Typeable
+
+instance Show UniqueInterruptWithSomeException where
+    show _ = "<< UniqueInterruptWithSomeException >>"
+
+instance Exception UniqueInterruptWithSomeException where
+#if MIN_VERSION_base(4,7,0)
+    toException = asyncExceptionToException
+    fromException = asyncExceptionFromException
+#endif
 #endif
 
 -- | maps an @IO@-performing function over any @Traversable@ data
@@ -656,9 +680,6 @@ forkRepeat action =
                   Left _ -> go
                   _      -> return ()
     in forkIO go
-
-catchAll :: IO a -> (SomeException -> IO a) -> IO a
-catchAll = catch
 
 tryAll :: IO a -> IO (Either SomeException a)
 tryAll = try

@@ -59,6 +59,10 @@ tests = [
     , testCase "left_terminates_by_asynchronous_exception_kills_right"
            race_left_terminates_by_asynchronous_exception_kills_right
     ]
+  , testGroup "concurrently" $
+    [ testCase "1" concurrently_1
+    , testCase "2" concurrently_2
+    ]
  ]
 
 value = 42 :: Int
@@ -268,3 +272,16 @@ race_left_terminates_by_asynchronous_exception_kills_right = do
                       return 'x')
 
   r @?= Left ThreadKilled
+
+concurrently_1 :: Assertion
+concurrently_1 = do
+  r <- concurrently (threadDelay 1000 >> return 1)
+                    (threadDelay 1000 >> return 'x')
+  r @?= (1, 'x')
+
+concurrently_2 :: Assertion
+concurrently_2 = do
+  void $ timeout 1000 $
+    concurrently (threadDelay 10000)
+                 (threadDelay 10000)
+  threadDelay 10000
