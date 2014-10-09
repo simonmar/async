@@ -1,4 +1,6 @@
-{-# LANGUAGE CPP, MagicHash, UnboxedTuples, RankNTypes #-}
+{-# LANGUAGE CPP, MagicHash, UnboxedTuples, RankNTypes,
+             ScopedTypeVariables, DeriveDataTypeable,
+             ExistentialQuantification #-}
 #if __GLASGOW_HASKELL__ >= 701
 {-# LANGUAGE Trustworthy #-}
 #endif
@@ -123,6 +125,8 @@ import Prelude hiding (catch)
 import Control.Monad
 import Control.Applicative
 import Data.Traversable
+import Data.Typeable
+import Data.Unique
 
 import GHC.Exts
 import GHC.IO hiding (finally, onException)
@@ -184,9 +188,9 @@ asyncUsing doFork = \action -> do
 
 -- | Spawn an asynchronous action in a separate thread, and pass its
 -- @Async@ handle to the supplied function.  When the function returns
--- or throws an exception, 'cancel' is called on the @Async@.
---
--- > withAsync action inner = bracket (async action) cancel inner
+-- or throws a /synchronous/ exception, 'cancel' is called on the
+-- @Async@.  When the function throws an /asynchronous/ exception, the
+-- exception is rethrown to the other thread.
 --
 -- This is a useful variant of 'async' that ensures an @Async@ is
 -- never left running unintentionally.
@@ -224,9 +228,25 @@ withAsyncUsing doFork = \action inner -> do
   mask $ \restore -> do
     t <- doFork $ try (restore action) >>= atomically . putTMVar var
     let a = Async t (readTMVar var)
-    r <- restore (inner a) `catchAll` \e -> do cancel a; throwIO e
+    r <- restore (inner a) `alsoThrowingTo` t
     cancel a
     return r
+
+-- | If the given action throws an asynchronous exception then also
+-- throw it to the specified thread. If it throws a synchronous
+-- exception then kill the specified thread.
+alsoThrowingTo :: IO a -> ThreadId -> IO a
+m `alsoThrowingTo` tid = m `catch` handler
+  where
+    handler e = do
+      case fromException e of
+#       if MIN_VERSION_base(4,7,0)
+          Just (_ :: SomeAsyncException) -> throwTo tid e
+#       else
+          Just (_ :: AsyncException)     -> throwTo tid e
+#       endif
+          Nothing                        -> throwTo tid ThreadKilled
+      throwIO e
 
 -- | Wait for an asynchronous action to complete, and return its
 -- value.  If the asynchronous action threw an exception, then the
@@ -486,44 +506,120 @@ concurrently left right =
 -- MVar versions of race/concurrently
 -- More ugly than the Async versions, but quite a bit faster.
 
+-- @race left right@ forks a thread to perform the @left@ computation and
+-- performs the @right@ computation in the current thread. When one of them
+-- terminates, whether normally or by raising an exception, the other thread is
+-- interrupt by way of a specially crafted asynchronous exception.
+--
+-- More concretely:
+--
+-- * When @left@ terminates normally it puts its result in an MVar and throws
+--   the 'InterruptRight' exception to the right thread.
+--
+-- * When @left@ terminates by an exception @e@ it throws the 'InterruptRight'
+--   exception (containing the exception @e@) to the right thread.
+--
+-- * When the right thread catches the 'InterruptRight' exception it will check
+--   for the optional exception thrown in the left thread and throw it if it's
+--   there. When it's not there it means the left thread terminated normally and
+--   the left result can be retrieved by taking the MVar.
+--
+--   Instead of putting the left result inside an MVar, another implementation
+--   is to put the result in the 'InterruptRight' exception. The right thread
+--   can then take out and return this result when it catches the exception.
+--   This does require the use of 'unsafeCoerce' to trick the type-system which
+--   is why I haven't used this approach.
+--
+-- * When @right@ terminates normally it throws an 'InterruptLeft' exception to
+--   the left thread in order to stop that thread from doing any more work.
+--
+-- * When @right@ throws an exception it is catched an thrown to the left thread
+--   contained in an 'InterruptLeft' exception.
+--
+--   The exact exception that gets contained in the 'InterruptLeft' exception is
+--   dependent on the type of exception being thrown: if an asynchronous
+--   exception was thrown the exception itself gets contained. For synchonous
+--   exceptions the 'ThreadKilled' exception is contained. This is to mimic the
+--   behaviour of 'withAsync'.
+--
+-- * When the left thread catches the 'InterruptLeft' exception it throws the
+--   contained exception.
+--
+-- Because calls to @race@ can be nested it's important that different
+-- 'InterruptLeft' or 'InterruptRight' exceptions are not mixed-up. For this
+-- reason each call to @race@ creates a 'Unique' value that gets embedded in the
+-- interrupt exceptions being thrown. When catching the interrupt exceptions we
+-- check if the Unique equals the Unique of this invocation of @race@. (This is
+-- the same trick used in the Timeout exception from System.Timeout).
+
 -- race :: IO a -> IO b -> IO (Either a b)
-race left right = concurrently' left right collect
-  where
-    collect m = do
-        e <- takeMVar m
-        case e of
-            Left ex -> throwIO ex
-            Right r -> return r
+race left right = do
+  leftResultMVar <- newEmptyMVar
+  rightTid <- myThreadId
+  u <- newUnique
+  mask $ \restore -> do
+    leftTid <- forkIO $
+      catch (do restore left >>= putMVar leftResultMVar
+                throwTo rightTid $ InterruptRight u Nothing) $ \e ->
+        case fromException e of
+          Just (InterruptLeft u' rightEx) | u == u' -> throwIO rightEx
+          _ -> do throwTo rightTid $ InterruptRight u (Just e)
+                  throwIO e
+    catch (do r <- restore right
+              throwTo leftTid $ InterruptLeft u ThreadKilled
+              return $ Right r) $ \e ->
+      case fromException e of
+        Just (InterruptRight u' mbEx) | u == u' ->
+          case mbEx of
+            Just leftEx -> throwIO leftEx
+            Nothing -> Left <$> takeMVar leftResultMVar
+        _ -> do
+          case fromException e of
+#           if MIN_VERSION_base(4,7,0)
+              Just (_ :: SomeAsyncException)
+                 -> throwTo leftTid $ InterruptLeft u e
+#           else
+              Just (_ :: AsyncException)
+                 -> throwTo leftTid $ InterruptLeft u e
+#           endif
+              Nothing
+                 -> throwTo leftTid $ InterruptLeft u ThreadKilled
+          throwIO e
+
+data InterruptLeft = forall e. (Exception e) => InterruptLeft Unique e
+                     deriving (Typeable)
+
+instance Show InterruptLeft where
+    show _ = "<< InterruptLeft >>"
+
+instance Exception InterruptLeft where
+#if MIN_VERSION_base(4,7,0)
+    toException = asyncExceptionToException
+    fromException = asyncExceptionFromException
+#endif
+
+data InterruptRight = InterruptRight Unique (Maybe SomeException)
+                      deriving Typeable
+
+instance Show InterruptRight where
+    show _ = "<< InterruptRight >>"
+
+instance Exception InterruptRight where
+#if MIN_VERSION_base(4,7,0)
+    toException = asyncExceptionToException
+    fromException = asyncExceptionFromException
+#endif
 
 -- race_ :: IO a -> IO b -> IO ()
 race_ left right = void $ race left right
 
 -- concurrently :: IO a -> IO b -> IO (a,b)
-concurrently left right = concurrently' left right (collect [])
-  where
-    collect [Left a, Right b] _ = return (a,b)
-    collect [Right b, Left a] _ = return (a,b)
-    collect xs m = do
-        e <- takeMVar m
-        case e of
-            Left ex -> throwIO ex
-            Right r -> collect (r:xs) m
-
-concurrently' :: IO a -> IO b
-             -> (MVar (Either SomeException (Either a b)) -> IO r)
-             -> IO r
-concurrently' left right collect = do
-    done <- newEmptyMVar
+concurrently left right = do
+    mv <- newEmptyMVar
+    rightTid <- myThreadId
     mask $ \restore -> do
-        lid <- forkIO $ restore (left >>= putMVar done . Right . Left)
-                             `catchAll` (putMVar done . Left)
-        rid <- forkIO $ restore (right >>= putMVar done . Right . Right)
-                             `catchAll` (putMVar done . Left)
-        let stop = killThread lid >> killThread rid
-        r <- restore (collect done) `onException` stop
-        stop
-        return r
-
+      leftTid <- forkIO $ restore left `alsoThrowingTo` rightTid >>= putMVar mv
+      (flip (,) <$> restore right <*> takeMVar mv) `alsoThrowingTo` leftTid
 #endif
 
 -- | maps an @IO@-performing function over any @Traversable@ data
@@ -589,9 +685,6 @@ forkRepeat action =
                   Left _ -> go
                   _      -> return ()
     in forkIO go
-
-catchAll :: IO a -> (SomeException -> IO a) -> IO a
-catchAll = catch
 
 tryAll :: IO a -> IO (Either SomeException a)
 tryAll = try
