@@ -618,7 +618,8 @@ concurrently left right = do
     mv <- newEmptyMVar
     rightTid <- myThreadId
     mask $ \restore -> do
-      leftTid <- forkIO $ restore left `alsoThrowingTo` rightTid >>= putMVar mv
+      leftTid <- forkIO $ (restore left >>= putMVar mv)
+                            `catchAll` throwTo rightTid
       (flip (,) <$> restore right <*> takeMVar mv) `alsoThrowingTo` leftTid
 #endif
 
@@ -685,6 +686,9 @@ forkRepeat action =
                   Left _ -> go
                   _      -> return ()
     in forkIO go
+
+catchAll :: IO a -> (SomeException -> IO a) -> IO a
+catchAll = catch
 
 tryAll :: IO a -> IO (Either SomeException a)
 tryAll = try
