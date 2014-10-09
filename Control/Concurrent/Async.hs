@@ -522,20 +522,9 @@ concurrently left right =
 --   will either throw the contained exception or return the left result
 --   normally.
 --
--- * When @right@ terminates normally it throws an 'InterruptLeft' exception to
---   the left thread in order to stop that thread from doing any more work.
---
--- * When @right@ throws an exception it is catched an thrown to the left thread
---   contained in an 'InterruptLeft' exception.
---
---   The exact exception that gets contained in the 'InterruptLeft' exception is
---   dependent on the type of exception being thrown: if an asynchronous
---   exception was thrown the exception itself gets contained. For synchonous
---   exceptions the 'ThreadKilled' exception is contained. This is to mimic the
---   behaviour of 'withAsync'.
---
--- * When the left thread catches the 'InterruptLeft' exception it throws the
---   contained exception.
+-- * When @right@ terminates, whether normally or by raising an
+--   exception, it throws an 'InterruptLeft' exception to the left
+--   thread in order to stop that thread from doing any more work.
 --
 -- Because calls to @race@ can be nested it's important that different
 -- 'InterruptLeft' or 'InterruptRight' exceptions are not mixed-up. For this
@@ -553,11 +542,10 @@ race left right = do
       catch (do l <- restore left
                 throwTo rightTid $ InterruptRight u $ Right l) $ \e ->
         case fromException e of
-          Just (InterruptLeft u' rightEx) | u == u' -> throwIO rightEx
-          _ -> do throwTo rightTid $ InterruptRight u (Left e)
-                  throwIO e
+          Just (InterruptLeft u') | u == u' -> return ()
+          _ -> throwTo rightTid $ InterruptRight u (Left e)
     catch (do r <- restore right
-              throwTo leftTid $ InterruptLeft u ThreadKilled
+              throwTo leftTid $ InterruptLeft u
               return $ Right r) $ \e ->
       case fromException e of
         Just (InterruptRight u' leftResult) | u == u' ->
@@ -565,20 +553,11 @@ race left right = do
             Left ex -> throwIO ex
             Right l -> return $ Left $ unsafeCoerce l
         _ -> do
-          case fromException e of
-#           if MIN_VERSION_base(4,7,0)
-              Just (_ :: SomeAsyncException)
-                 -> throwTo leftTid $ InterruptLeft u e
-#           else
-              Just (_ :: AsyncException)
-                 -> throwTo leftTid $ InterruptLeft u e
-#           endif
-              Nothing
-                 -> throwTo leftTid $ InterruptLeft u ThreadKilled
+          throwTo leftTid $ InterruptLeft u
           throwIO e
 
-data InterruptLeft = forall e. (Exception e) => InterruptLeft Unique e
-                     deriving (Typeable)
+data InterruptLeft = InterruptLeft Unique
+                     deriving Typeable
 
 instance Show InterruptLeft where
     show _ = "<< InterruptLeft >>"
