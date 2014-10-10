@@ -58,10 +58,14 @@ tests = [
            race_right_terminates_by_asynchronous_exception_kills_both
     , testCase "left_terminates_by_asynchronous_exception_kills_right"
            race_left_terminates_by_asynchronous_exception_kills_right
+    , testCase "left_receives_asynchronous_exception"
+           race_left_receives_asynchronous_exception
     ]
   , testGroup "concurrently" $
     [ testCase "1" concurrently_1
     , testCase "2" concurrently_2
+    , testCase      "left_receives_asynchronous_exception"
+        concurrently_left_receives_asynchronous_exception
     ]
  ]
 
@@ -273,6 +277,27 @@ race_left_terminates_by_asynchronous_exception_kills_right = do
 
   r @?= Left ThreadKilled
 
+race_left_receives_asynchronous_exception :: Assertion
+race_left_receives_asynchronous_exception = do
+  rightTidMv <- newEmptyMVar
+
+  exMv <- newEmptyMVar
+
+  forkIO $ do
+    threadDelay 1000
+    rightTid <- takeMVar rightTidMv
+    throwTo rightTid UserInterrupt
+
+  catchIgnore $
+    race (threadDelay 100000 `catch` putMVar exMv)
+         (do rightTid <- myThreadId
+             putMVar rightTidMv rightTid
+             threadDelay 10000)
+
+  ex <- takeMVar exMv
+
+  ex @?= UserInterrupt
+
 concurrently_1 :: Assertion
 concurrently_1 = do
   r <- concurrently (threadDelay 1000 >> return 1)
@@ -285,3 +310,24 @@ concurrently_2 = do
     concurrently (threadDelay 10000)
                  (threadDelay 10000)
   threadDelay 10000
+
+concurrently_left_receives_asynchronous_exception :: Assertion
+concurrently_left_receives_asynchronous_exception = do
+  rightTidMv <- newEmptyMVar
+
+  exMv <- newEmptyMVar
+
+  forkIO $ do
+    threadDelay 1000
+    rightTid <- takeMVar rightTidMv
+    throwTo rightTid UserInterrupt
+
+  catchIgnore $
+    concurrently (threadDelay 100000 `catch` putMVar exMv)
+                 (do rightTid <- myThreadId
+                     putMVar rightTidMv rightTid
+                     threadDelay 10000)
+
+  ex <- takeMVar exMv
+
+  ex @?= UserInterrupt

@@ -127,6 +127,7 @@ import Control.Applicative
 import Data.Traversable
 import Data.Typeable
 import Data.Unique
+import Data.IORef
 import Unsafe.Coerce
 
 import GHC.Exts
@@ -222,32 +223,26 @@ withAsyncOnWithUnmask cpu actionWith = withAsyncUsing (rawForkOn cpu) (actionWit
 
 withAsyncUsing :: (IO () -> IO ThreadId)
                -> IO a -> (Async a -> IO b) -> IO b
--- The bracket version works, but is slow.  We can do better by
--- hand-coding it:
 withAsyncUsing doFork = \action inner -> do
   var <- newEmptyTMVarIO
   mask $ \restore -> do
     t <- doFork $ try (restore action) >>= atomically . putTMVar var
     let a = Async t (readTMVar var)
-    r <- restore (inner a) `alsoThrowingTo` t
+    r <- restore (inner a) `catch` \e -> do
+      throwAsyncTo t e
+      throwIO e
     cancel a
     return r
 
--- | If the given action throws an asynchronous exception then also
--- throw it to the specified thread. If it throws a synchronous
--- exception then kill the specified thread.
-alsoThrowingTo :: IO a -> ThreadId -> IO a
-m `alsoThrowingTo` tid = m `catch` handler
-  where
-    handler e = do
-      case fromException e of
-#       if MIN_VERSION_base(4,7,0)
-          Just (_ :: SomeAsyncException) -> throwTo tid e
-#       else
-          Just (_ :: AsyncException)     -> throwTo tid e
-#       endif
-          Nothing                        -> throwTo tid ThreadKilled
-      throwIO e
+throwAsyncTo :: ThreadId -> SomeException -> IO ()
+throwAsyncTo tid e =
+    case fromException e of
+#if MIN_VERSION_base(4,7,0)
+      Just (_ :: SomeAsyncException) -> throwTo tid e
+#else
+      Just (_ :: AsyncException)     -> throwTo tid e
+#endif
+      Nothing                        -> throwTo tid ThreadKilled
 
 -- | Wait for an asynchronous action to complete, and return its
 -- value.  If the asynchronous action threw an exception, then the
@@ -538,17 +533,21 @@ concurrently left right =
 race left right = do
   rightTid <- myThreadId
   u <- newUnique
+  throwToRightRef <- newIORef True
   mask $ \restore -> do
     leftTid <- forkIO $
       catch
         (do l <- restore left
-            throwTo rightTid $ UniqueInterruptWithResult u $ Right l) $ \e ->
-        case fromException e of
-          Just (UniqueInterrupt u') | u == u' -> return ()
-          _ -> throwTo rightTid $ UniqueInterruptWithResult u (Left e)
+            throwToRight <- readIORef throwToRightRef
+            when throwToRight $
+              throwTo rightTid $ UniqueInterruptWithResult u $ Right l) $ \e -> do
+        throwToRight <- readIORef throwToRightRef
+        when throwToRight $
+          throwTo rightTid $ UniqueInterruptWithResult u (Left e)
     catch
       (do r <- restore right
-          throwTo leftTid $ UniqueInterrupt u
+          writeIORef throwToRightRef False
+          throwTo leftTid ThreadKilled
           return $ Right r) $ \e ->
       case fromException e of
         Just (UniqueInterruptWithResult u' leftResult) | u == u' ->
@@ -556,7 +555,8 @@ race left right = do
             Left ex -> throwIO ex
             Right l -> return $ Left $ unsafeCoerce l
         _ -> do
-          throwTo leftTid $ UniqueInterrupt u
+          writeIORef throwToRightRef False
+          throwAsyncTo leftTid e
           throwIO e
 
 -- race_ :: IO a -> IO b -> IO ()
@@ -567,28 +567,19 @@ concurrently left right = do
     mv <- newEmptyMVar
     rightTid <- myThreadId
     u <- newUnique
+    throwToRightRef <- newIORef True
     mask $ \restore -> do
-      leftTid <- forkIO $ catch (restore left >>= putMVar mv) $ \e ->
-        case fromException e of
-          Just (UniqueInterrupt u') | u == u' -> return ()
-          _ -> throwTo rightTid $ UniqueInterruptWithSomeException u e
+      leftTid <- forkIO $ catch (restore left >>= putMVar mv) $ \e -> do
+        throwToRight <- readIORef throwToRightRef
+        when throwToRight $
+          throwTo rightTid $ UniqueInterruptWithSomeException u e
       catch (flip (,) <$> restore right <*> takeMVar mv) $ \e ->
           case fromException e of
             Just (UniqueInterruptWithSomeException u' ex) | u == u' -> throwIO ex
-            _ -> do throwTo leftTid (UniqueInterrupt u)
-                    throwIO e
-
-data UniqueInterrupt = UniqueInterrupt Unique
-                     deriving Typeable
-
-instance Show UniqueInterrupt where
-    show _ = "<< UniqueInterrupt >>"
-
-instance Exception UniqueInterrupt where
-#if MIN_VERSION_base(4,7,0)
-    toException = asyncExceptionToException
-    fromException = asyncExceptionFromException
-#endif
+            _ -> do
+              writeIORef throwToRightRef False
+              throwAsyncTo leftTid e
+              throwIO e
 
 data UniqueInterruptWithResult =
     forall a. UniqueInterruptWithResult Unique (Either SomeException a)
