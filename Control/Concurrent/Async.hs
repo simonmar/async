@@ -509,17 +509,26 @@ concurrently left right =
 --
 -- More concretely:
 --
--- * When @left@ terminates, whether normally or by raising an
---   exception, it wraps its result in the 'UniqueInterruptWithResult'
---   exception and throws that to the right thread.
+-- When @left@ terminates, whether normally or by raising an
+-- exception, it wraps its result in the 'UniqueInterruptWithResult'
+-- exception and throws that to the right thread.
 --
--- * When the right thread catches the 'UniqueInterruptWithResult'
---   exception it will either throw the contained exception or return
---   the left result normally.
+-- When the right thread catches the 'UniqueInterruptWithResult'
+-- exception it will either throw the contained exception or return
+-- the left result normally.
 --
--- * When @right@ terminates, whether normally or by raising an
---   exception, it throws an 'UniqueInterrupt' exception to the left
---   thread in order to stop that thread from doing any more work.
+-- When @right@ terminates normally or by a non-asynchronous exception
+-- it kills the left thread. When it terminates with an asynchronous
+-- exception the exception is thrown to the left thread.
+--
+-- When @right@ terminates it has to throw an exception to the left
+-- thread. However, the left thread will throw an exception back to
+-- the right thread when it receives one. We don't want the left
+-- thread to throw back an exception it just got from the right
+-- thread. To protect against this we set a boolean before the right
+-- thread throws an exception to the left thread. The left thread
+-- checks this boolean before it needs to throw an exception to the
+-- right thread.
 --
 -- Because calls to @race@ can be nested it's important that different
 -- 'UniqueInterrupt' or 'UniqueInterruptWithResult' exceptions are not
