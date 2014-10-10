@@ -229,20 +229,22 @@ withAsyncUsing doFork = \action inner -> do
     t <- doFork $ try (restore action) >>= atomically . putTMVar var
     let a = Async t (readTMVar var)
     r <- restore (inner a) `catch` \e -> do
-      throwAsyncTo t e
+      throwTo t $ normalizeAsyncEx e
       throwIO e
     cancel a
     return r
 
-throwAsyncTo :: ThreadId -> SomeException -> IO ()
-throwAsyncTo tid e =
+-- | Converts non-asynchronous exception into ThreadKilled and leaves
+-- asynchronous exceptions alone.
+normalizeAsyncEx :: SomeException -> SomeException
+normalizeAsyncEx e =
     case fromException e of
 #if MIN_VERSION_base(4,7,0)
-      Just (_ :: SomeAsyncException) -> throwTo tid e
+      Just (_ :: SomeAsyncException) -> e
 #else
-      Just (_ :: AsyncException)     -> throwTo tid e
+      Just (_ :: AsyncException)     -> e
 #endif
-      Nothing                        -> throwTo tid ThreadKilled
+      Nothing -> toException ThreadKilled
 
 -- | Wait for an asynchronous action to complete, and return its
 -- value.  If the asynchronous action threw an exception, then the
@@ -549,42 +551,42 @@ race left right = do
   mask $ \restore -> do
     leftTid <- forkIO $ catch (restore left >>= interruptRight . Right)
                               (interruptRight . Left)
-    catch
-      (do r <- restore right
+    let interruptLeft e = do
           writeIORef throwToRightRef False
-          throwTo leftTid ThreadKilled
-          return $ Right r) $ \e ->
-      case fromException e of
-        Just (UniqueInterruptWithResult u' leftResult) | u == u' ->
-          case leftResult of
-            Left ex -> throwIO ex
-            Right l -> return $ Left $ unsafeCoerce l
-        _ -> do
-          writeIORef throwToRightRef False
-          throwAsyncTo leftTid e
-          throwIO e
+          throwTo leftTid e
+    catch ((Right <$> restore right) <* interruptLeft ThreadKilled) $ \e ->
+          case fromException e of
+            Just (UniqueInterruptWithResult u' leftResult) | u == u'
+              -> case leftResult of
+                   Left ex -> throwIO ex
+                   Right l -> return $ Left $ unsafeCoerce l
+            _ -> do interruptLeft $ normalizeAsyncEx e
+                    throwIO e
 
 -- race_ :: IO a -> IO b -> IO ()
 race_ left right = void $ race left right
 
 -- concurrently :: IO a -> IO b -> IO (a,b)
 concurrently left right = do
-    mv <- newEmptyMVar
+    leftResultMv <- newEmptyMVar
     rightTid <- myThreadId
     u <- newUnique
     throwToRightRef <- newIORef True
+    let interruptRight e = do
+          throwToRight <- readIORef throwToRightRef
+          when throwToRight $ throwTo rightTid $ UniqueInterruptWithException u e
     mask $ \restore -> do
-      leftTid <- forkIO $ catch (restore left >>= putMVar mv) $ \e -> do
-        throwToRight <- readIORef throwToRightRef
-        when throwToRight $
-          throwTo rightTid $ UniqueInterruptWithSomeException u e
-      catch (flip (,) <$> restore right <*> takeMVar mv) $ \e ->
-          case fromException e of
-            Just (UniqueInterruptWithSomeException u' ex) | u == u' -> throwIO ex
-            _ -> do
-              writeIORef throwToRightRef False
-              throwAsyncTo leftTid e
-              throwIO e
+      leftTid <- forkIO $ catch (restore left >>= putMVar leftResultMv)
+                                interruptRight
+      let interruptLeft e = do
+            writeIORef throwToRightRef False
+            throwTo leftTid e
+      catch (flip (,) <$> restore right <*> takeMVar leftResultMv) $ \e ->
+            case fromException e of
+              Just (UniqueInterruptWithException u' ex) | u == u'
+                -> throwIO ex
+              _ -> do interruptLeft $ normalizeAsyncEx e
+                      throwIO e
 
 data UniqueInterruptWithResult =
     forall a. UniqueInterruptWithResult Unique (Either SomeException a)
@@ -599,14 +601,14 @@ instance Exception UniqueInterruptWithResult where
     fromException = asyncExceptionFromException
 #endif
 
-data UniqueInterruptWithSomeException =
-    UniqueInterruptWithSomeException Unique SomeException
+data UniqueInterruptWithException =
+    UniqueInterruptWithException Unique SomeException
     deriving Typeable
 
-instance Show UniqueInterruptWithSomeException where
-    show _ = "<< UniqueInterruptWithSomeException >>"
+instance Show UniqueInterruptWithException where
+    show _ = "<< UniqueInterruptWithException >>"
 
-instance Exception UniqueInterruptWithSomeException where
+instance Exception UniqueInterruptWithException where
 #if MIN_VERSION_base(4,7,0)
     toException = asyncExceptionToException
     fromException = asyncExceptionFromException
