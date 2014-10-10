@@ -531,28 +531,24 @@ concurrently left right =
 -- right thread.
 --
 -- Because calls to @race@ can be nested it's important that different
--- 'UniqueInterrupt' or 'UniqueInterruptWithResult' exceptions are not
--- mixed-up. For this reason each call to @race@ creates a 'Unique'
--- value that gets embedded in the interrupt exceptions being
--- thrown. When catching the interrupt exceptions we check if the
--- Unique equals the Unique of this invocation of @race@. (This is the
--- same trick used in the Timeout exception from System.Timeout).
+-- 'UniqueInterruptWithResult' exceptions are not mixed-up. For this
+-- reason each call to @race@ creates a 'Unique' value that gets
+-- embedded in the interrupt exceptions being thrown. When catching
+-- the interrupt exceptions we check if the Unique equals the Unique
+-- of this invocation of @race@. (This is the same trick used in the
+-- Timeout exception from System.Timeout).
 
 -- race :: IO a -> IO b -> IO (Either a b)
 race left right = do
   rightTid <- myThreadId
   u <- newUnique
   throwToRightRef <- newIORef True
-  mask $ \restore -> do
-    leftTid <- forkIO $
-      catch
-        (do l <- restore left
-            throwToRight <- readIORef throwToRightRef
-            when throwToRight $
-              throwTo rightTid $ UniqueInterruptWithResult u $ Right l) $ \e -> do
+  let interruptRight r = do
         throwToRight <- readIORef throwToRightRef
-        when throwToRight $
-          throwTo rightTid $ UniqueInterruptWithResult u (Left e)
+        when throwToRight $ throwTo rightTid $ UniqueInterruptWithResult u r
+  mask $ \restore -> do
+    leftTid <- forkIO $ catch (restore left >>= interruptRight . Right)
+                              (interruptRight . Left)
     catch
       (do r <- restore right
           writeIORef throwToRightRef False
