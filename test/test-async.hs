@@ -60,12 +60,16 @@ tests = [
            race_left_terminates_by_asynchronous_exception_kills_right
     , testCase "left_receives_asynchronous_exception"
            race_left_receives_asynchronous_exception
+    , testCase "nested"
+           race_nested
     ]
   , testGroup "concurrently" $
     [ testCase "1" concurrently_1
     , testCase "2" concurrently_2
     , testCase      "left_receives_asynchronous_exception"
         concurrently_left_receives_asynchronous_exception
+    , testCase      "nested"
+        concurrently_nested
     ]
  ]
 
@@ -298,6 +302,14 @@ race_left_receives_asynchronous_exception = do
 
   ex @?= UserInterrupt
 
+race_nested :: Assertion
+race_nested = do
+  r <- race (threadDelay 1000 >> return 1)
+            (race (threadDelay 10000 >> return 'x')
+                  (threadDelay 100000 >> return False)
+            )
+  r @?= Left 1
+
 concurrently_1 :: Assertion
 concurrently_1 = do
   r <- concurrently (threadDelay 1000 >> return 1)
@@ -331,3 +343,18 @@ concurrently_left_receives_asynchronous_exception = do
   ex <- takeMVar exMv
 
   ex @?= UserInterrupt
+
+concurrently_nested :: Assertion
+concurrently_nested = do
+  ref <- newIORef False
+  r <- try $ concurrently (threadDelay 1000 >> throwIO DivideByZero)
+                          (concurrently (threadDelay 10000 >> writeIORef ref True)
+                                        (threadDelay 100000 >> return False))
+  threadDelay 100000
+  case r of
+    Left e -> case fromException e of
+                Just DivideByZero -> do
+                  middleCompleted <- readIORef ref
+                  assertBool "Middle completed!" $ not middleCompleted
+                _ -> assertFailure ""
+    Right _ -> assertFailure ""
