@@ -554,7 +554,7 @@ race left right = do
     let interruptLeft e = do
           writeIORef throwToRightRef False
           throwTo leftTid e
-    catch ((Right <$> restore right) <* interruptLeft ThreadKilled) $ \e ->
+    catch (Right <$> restore right <* interruptLeft ThreadKilled) $ \e ->
           case fromException e of
             Just (UniqueInterruptWithResult u' leftResult) | u == u'
               -> case leftResult of
