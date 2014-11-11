@@ -24,10 +24,10 @@ install:
  - sudo /opt/ghc/$GHCVER/bin/ghc-pkg recache
  - /opt/ghc/$GHCVER/bin/ghc-pkg recache --user
  - cabal update
- - cabal install --only-dependencies # --enable-tests
+ - cabal install --only-dependencies
 
 script:
- - cabal configure -v2 --enable-test
+ - cabal configure -v2
  - cabal build
  # - cabal test # this should be enabled again  later
  - cabal sdist
