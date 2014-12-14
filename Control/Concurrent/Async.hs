@@ -92,7 +92,7 @@ module Control.Concurrent.Async (
     -- ** Spawning with automatic 'cancel'ation
     withAsync, withAsyncBound, withAsyncOn, withAsyncWithUnmask, withAsyncOnWithUnmask,
 
-    -- ** Quering 'Async's
+    -- ** Querying 'Async's
     wait, poll, waitCatch, cancel, cancelWith,
     asyncThreadId,
 
