@@ -122,7 +122,9 @@ import Prelude hiding (catch)
 #endif
 import Control.Monad
 import Control.Applicative
+#if !MIN_VERSION_base(4,8,0)
 import Data.Traversable
+#endif
 
 import GHC.Exts
 import GHC.IO hiding (finally, onException)
