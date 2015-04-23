@@ -573,11 +573,6 @@ instance Alternative Concurrently where
   Concurrently as <|> Concurrently bs =
     Concurrently $ either id id <$> race as bs
 
-instance Monad Concurrently where
-  return = pure
-  Concurrently a >>= f =
-    Concurrently $ a >>= runConcurrently . f
-
 -- ----------------------------------------------------------------------------
 
 -- | Fork a thread that runs the supplied action, and if it raises an
