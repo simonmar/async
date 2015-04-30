@@ -521,7 +521,9 @@ concurrently' left right collect = do
                              `catchAll` (putMVar done . Left)
         rid <- forkIO $ restore (right >>= putMVar done . Right . Right)
                              `catchAll` (putMVar done . Left)
-        let stop = killThread lid >> killThread rid
+        let stop = killThread rid >> killThread lid
+                   -- kill right before left, to match the semantics of
+                   -- the version using withAsync. (#27)
         r <- restore (collect done) `onException` stop
         stop
         return r
