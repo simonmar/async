@@ -56,7 +56,7 @@ description:
  .
  * Added @Concurrently@ (with @Applicative@ and @Alternative@ instances)
 
-version:             2.0.1.6
+version:             2.0.1.7
 license:             BSD3
 license-file:        LICENSE
 author:              Simon Marlow

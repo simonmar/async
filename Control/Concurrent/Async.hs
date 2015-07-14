@@ -109,7 +109,7 @@ module Control.Concurrent.Async (
     link, link2,
 
     -- * Convenient utilities
-    race, race_, concurrently, mapConcurrently,
+    race, race_, concurrently, mapConcurrently, forConcurrently,
     Concurrently(..),
 
   ) where
@@ -541,6 +541,13 @@ concurrently' left right collect = do
 --
 mapConcurrently :: Traversable t => (a -> IO b) -> t a -> IO (t b)
 mapConcurrently f = runConcurrently . traverse (Concurrently . f)
+
+-- | `forConcurrently` is `mapConcurrently` with its arguments flipped
+--
+-- > pages <- forConcurrently ["url1", "url2", "url3"] $ \url -> getURL url
+--
+forConcurrently :: Traversable t => t a -> (a -> IO b)-> IO (t b)
+forConcurrently = flip mapConcurrently
 
 -- -----------------------------------------------------------------------------
 
