@@ -105,6 +105,12 @@ module Control.Concurrent.Async (
     waitEither_,
     waitBoth,
 
+    -- ** Waiting for multiple 'Async's in STM
+    waitAnySTM, waitAnyCatchSTM,
+    waitEitherSTM, waitEitherCatchSTM,
+    waitEitherSTM_,
+    waitBothSTM,
+
     -- ** Linking
     link, link2,
 
@@ -318,9 +324,14 @@ cancelWith (Async t _) e = throwTo t e
 -- If multiple 'Async's complete or have completed, then the value
 -- returned corresponds to the first completed 'Async' in the list.
 --
+{-# INLINE waitAnyCatch #-}
 waitAnyCatch :: [Async a] -> IO (Async a, Either SomeException a)
-waitAnyCatch asyncs =
-  atomically $
+waitAnyCatch = atomically . waitAnyCatchSTM
+
+-- | A version of 'waitAnyCatch' that can be used inside an STM transaction.
+--
+waitAnyCatchSTM :: [Async a] -> STM (Async a, Either SomeException a)
+waitAnyCatchSTM asyncs =
     foldr orElse retry $
       map (\a -> do r <- waitCatchSTM a; return (a, r)) asyncs
 
@@ -338,9 +349,14 @@ waitAnyCatchCancel asyncs =
 -- If multiple 'Async's complete or have completed, then the value
 -- returned corresponds to the first completed 'Async' in the list.
 --
+{-# INLINE waitAny #-}
 waitAny :: [Async a] -> IO (Async a, a)
-waitAny asyncs =
-  atomically $
+waitAny = atomically . waitAnySTM
+
+-- | A version of 'waitAny' that can be used inside an STM transaction.
+--
+waitAnySTM :: [Async a] -> STM (Async a, a)
+waitAnySTM asyncs =
     foldr orElse retry $
       map (\a -> do r <- waitSTM a; return (a, r)) asyncs
 
@@ -352,11 +368,18 @@ waitAnyCancel asyncs =
   waitAny asyncs `finally` mapM_ cancel asyncs
 
 -- | Wait for the first of two @Async@s to finish.
+{-# INLINE waitEitherCatch #-}
 waitEitherCatch :: Async a -> Async b
                 -> IO (Either (Either SomeException a)
                               (Either SomeException b))
-waitEitherCatch left right =
-  atomically $
+waitEitherCatch left right = atomically (waitEitherCatchSTM left right)
+
+-- | A version of 'waitEitherCatch' that can be used inside an STM transaction.
+--
+waitEitherCatchSTM :: Async a -> Async b
+                -> STM (Either (Either SomeException a)
+                               (Either SomeException b))
+waitEitherCatchSTM left right =
     (Left  <$> waitCatchSTM left)
       `orElse`
     (Right <$> waitCatchSTM right)
@@ -374,18 +397,28 @@ waitEitherCatchCancel left right =
 -- that finished first raised an exception, then the exception is
 -- re-thrown by 'waitEither'.
 --
+{-# INLINE waitEither #-}
 waitEither :: Async a -> Async b -> IO (Either a b)
-waitEither left right =
-  atomically $
+waitEither left right = atomically (waitEitherSTM left right)
+
+-- | A version of 'waitEither' that can be used inside an STM transaction.
+--
+waitEitherSTM :: Async a -> Async b -> STM (Either a b)
+waitEitherSTM left right =
     (Left  <$> waitSTM left)
       `orElse`
     (Right <$> waitSTM right)
 
 -- | Like 'waitEither', but the result is ignored.
 --
+{-# INLINE waitEither_ #-}
 waitEither_ :: Async a -> Async b -> IO ()
-waitEither_ left right =
-  atomically $
+waitEither_ left right = atomically (waitEitherSTM_ left right)
+
+-- | A version of 'waitEither_' that can be used inside an STM transaction.
+--
+waitEitherSTM_:: Async a -> Async b -> STM ()
+waitEitherSTM_ left right =
     (void $ waitSTM left)
       `orElse`
     (void $ waitSTM right)
@@ -401,9 +434,14 @@ waitEitherCancel left right =
 -- an exception before they have both finished, then the exception is
 -- re-thrown by 'waitBoth'.
 --
+{-# INLINE waitBoth #-}
 waitBoth :: Async a -> Async b -> IO (a,b)
-waitBoth left right =
-  atomically $ do
+waitBoth left right = atomically (waitBothSTM left right)
+
+-- | A version of 'waitBoth' that can be used inside an STM transaction.
+--
+waitBothSTM :: Async a -> Async b -> STM (a,b)
+waitBothSTM left right = do
     a <- waitSTM left
            `orElse`
          (waitSTM right >> retry)
