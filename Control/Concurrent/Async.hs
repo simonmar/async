@@ -129,6 +129,7 @@ import Prelude hiding (catch)
 import Control.Monad
 import Control.Applicative
 #if !MIN_VERSION_base(4,8,0)
+import Data.Monoid
 import Data.Traversable
 #endif
 
@@ -619,6 +620,10 @@ instance Alternative Concurrently where
   empty = Concurrently $ forever (threadDelay maxBound)
   Concurrently as <|> Concurrently bs =
     Concurrently $ either id id <$> race as bs
+
+instance Monoid a => Monoid (Concurrently a) where
+  mempty = pure mempty
+  mappend = liftA2 mappend
 
 -- ----------------------------------------------------------------------------
 
