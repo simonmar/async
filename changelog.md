@@ -1,6 +1,16 @@
+## Changes in 2.1.0:
+
+ - Bump base dependency to allow 4.10
+ - Remove invalid Monad instance for `Concurrently`
+ - Add `Monoid` and `Semigroup` instances for `Concurrently`
+ - Add `forConcurrently` (flipped version of `mapConcurrently`)
+ - Add STM version of all applicable IO functions:
+   `waitAnySTM`, `waitAnyCatchSTM`, `waitEitherSTM`,
+   `waitEitherCatchSTM`, `waitEitherSTM_`, and `waitBothSTM`.
+
 ## Changes in 2.0.2:
 
- - Add a Monad instance for Concurrently
+ - Add a Monad instance for `Concurrently`
  - Bump base dependency to allow 4.9
 
 ## Changes in 2.0.1.6:
