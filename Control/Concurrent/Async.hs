@@ -129,9 +129,13 @@ import Prelude hiding (catch)
 import Control.Monad
 import Control.Applicative
 #if !MIN_VERSION_base(4,8,0)
-import Data.Monoid
+import Data.Monoid (Monoid(mempty,mappend))
 import Data.Traversable
 #endif
+#if MIN_VERSION_base(4,9,0)
+import Data.Semigroup (Semigroup((<>)))
+#endif
+
 
 import GHC.Exts
 import GHC.IO hiding (finally, onException)
@@ -621,9 +625,23 @@ instance Alternative Concurrently where
   Concurrently as <|> Concurrently bs =
     Concurrently $ either id id <$> race as bs
 
+#if MIN_VERSION_base(4,9,0)
+-- | Only defined by @async@ for @base >= 4.9@
+--
+-- @since 2.1.0
+instance Semigroup a => Semigroup (Concurrently a) where
+  (<>) = liftA2 (<>)
+
+-- | @since 2.1.0
+instance (Semigroup a, Monoid a) => Monoid (Concurrently a) where
+  mempty = pure mempty
+  mappend = (<>)
+#else
+-- | @since 2.1.0
 instance Monoid a => Monoid (Concurrently a) where
   mempty = pure mempty
   mappend = liftA2 mappend
+#endif
 
 -- ----------------------------------------------------------------------------
 
