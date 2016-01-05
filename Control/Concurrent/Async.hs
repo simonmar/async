@@ -129,9 +129,13 @@ import Prelude hiding (catch)
 import Control.Monad
 import Control.Applicative
 #if !MIN_VERSION_base(4,8,0)
-import Data.Monoid
+import Data.Monoid (Monoid(mempty,mappend))
 import Data.Traversable
 #endif
+#if MIN_VERSION_base(4,9,0)
+import Data.Semigroup (Semigroup((<>)))
+#endif
+
 
 import GHC.Exts
 import GHC.IO hiding (finally, onException)
@@ -331,6 +335,7 @@ waitAnyCatch = atomically . waitAnyCatchSTM
 
 -- | A version of 'waitAnyCatch' that can be used inside an STM transaction.
 --
+-- @since 2.1.0
 waitAnyCatchSTM :: [Async a] -> STM (Async a, Either SomeException a)
 waitAnyCatchSTM asyncs =
     foldr orElse retry $
@@ -356,6 +361,7 @@ waitAny = atomically . waitAnySTM
 
 -- | A version of 'waitAny' that can be used inside an STM transaction.
 --
+-- @since 2.1.0
 waitAnySTM :: [Async a] -> STM (Async a, a)
 waitAnySTM asyncs =
     foldr orElse retry $
@@ -377,6 +383,7 @@ waitEitherCatch left right = atomically (waitEitherCatchSTM left right)
 
 -- | A version of 'waitEitherCatch' that can be used inside an STM transaction.
 --
+-- @since 2.1.0
 waitEitherCatchSTM :: Async a -> Async b
                 -> STM (Either (Either SomeException a)
                                (Either SomeException b))
@@ -404,6 +411,7 @@ waitEither left right = atomically (waitEitherSTM left right)
 
 -- | A version of 'waitEither' that can be used inside an STM transaction.
 --
+-- @since 2.1.0
 waitEitherSTM :: Async a -> Async b -> STM (Either a b)
 waitEitherSTM left right =
     (Left  <$> waitSTM left)
@@ -418,6 +426,7 @@ waitEither_ left right = atomically (waitEitherSTM_ left right)
 
 -- | A version of 'waitEither_' that can be used inside an STM transaction.
 --
+-- @since 2.1.0
 waitEitherSTM_:: Async a -> Async b -> STM ()
 waitEitherSTM_ left right =
     (void $ waitSTM left)
@@ -441,6 +450,7 @@ waitBoth left right = atomically (waitBothSTM left right)
 
 -- | A version of 'waitBoth' that can be used inside an STM transaction.
 --
+-- @since 2.1.0
 waitBothSTM :: Async a -> Async b -> STM (a,b)
 waitBothSTM left right = do
     a <- waitSTM left
@@ -585,6 +595,7 @@ mapConcurrently f = runConcurrently . traverse (Concurrently . f)
 --
 -- > pages <- forConcurrently ["url1", "url2", "url3"] $ \url -> getURL url
 --
+-- @since 2.1.0
 forConcurrently :: Traversable t => t a -> (a -> IO b)-> IO (t b)
 forConcurrently = flip mapConcurrently
 
@@ -621,9 +632,23 @@ instance Alternative Concurrently where
   Concurrently as <|> Concurrently bs =
     Concurrently $ either id id <$> race as bs
 
+#if MIN_VERSION_base(4,9,0)
+-- | Only defined by @async@ for @base >= 4.9@
+--
+-- @since 2.1.0
+instance Semigroup a => Semigroup (Concurrently a) where
+  (<>) = liftA2 (<>)
+
+-- | @since 2.1.0
+instance (Semigroup a, Monoid a) => Monoid (Concurrently a) where
+  mempty = pure mempty
+  mappend = (<>)
+#else
+-- | @since 2.1.0
 instance Monoid a => Monoid (Concurrently a) where
   mempty = pure mempty
   mappend = liftA2 mappend
+#endif
 
 -- ----------------------------------------------------------------------------
 
