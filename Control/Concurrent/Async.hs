@@ -53,7 +53,7 @@
 -- >       ...
 --
 -- 'withAsync' is like 'async', except that the 'Async' is
--- automatically killed (using 'cancel') if the enclosing IO operation
+-- automatically killed (using 'uninterruptibleCancel') if the enclosing IO operation
 -- returns before it has completed.  Consider the case when the first
 -- 'wait' throws an exception; then the second 'Async' will be
 -- automatically killed rather than being left to run in the
@@ -93,7 +93,7 @@ module Control.Concurrent.Async (
     withAsync, withAsyncBound, withAsyncOn, withAsyncWithUnmask, withAsyncOnWithUnmask,
 
     -- ** Querying 'Async's
-    wait, poll, waitCatch, cancel, cancelWith,
+    wait, poll, waitCatch, cancel, uninterruptibleCancel, cancelWith,
     asyncThreadId,
 
     -- ** STM operations
@@ -197,15 +197,12 @@ asyncUsing doFork = \action -> do
 
 -- | Spawn an asynchronous action in a separate thread, and pass its
 -- @Async@ handle to the supplied function.  When the function returns
--- or throws an exception, 'cancel' is called on the @Async@.
+-- or throws an exception, 'uninterruptibleCancel' is called on the @Async@.
 --
--- > withAsync action inner = bracket (async action) cancel inner
+-- > withAsync action inner = bracket (async action) uninterruptibleCancel inner
 --
 -- This is a useful variant of 'async' that ensures an @Async@ is
 -- never left running unintentionally.
---
--- Since 'cancel' may block, 'withAsync' may also block; see 'cancel'
--- for details.
 --
 withAsync :: IO a -> (Async a -> IO b) -> IO b
 withAsync = inline withAsyncUsing rawForkIO
@@ -237,8 +234,10 @@ withAsyncUsing doFork = \action inner -> do
   mask $ \restore -> do
     t <- doFork $ try (restore action) >>= atomically . putTMVar var
     let a = Async t (readTMVar var)
-    r <- restore (inner a) `catchAll` \e -> do cancel a; throwIO e
-    cancel a
+    r <- restore (inner a) `catchAll` \e -> do
+      uninterruptibleCancel a
+      throwIO e
+    uninterruptibleCancel a
     return r
 
 -- | Wait for an asynchronous action to complete, and return its
@@ -307,10 +306,18 @@ pollSTM (Async _ w) = (Just <$> w) `orElse` return Nothing
 -- not be thrown until the foreign call returns, and in this case
 -- 'cancel' may block indefinitely.  An asynchronous 'cancel' can
 -- of course be obtained by wrapping 'cancel' itself in 'async'.
+-- See also `uninterruptibleCancel`.
 --
 {-# INLINE cancel #-}
 cancel :: Async a -> IO ()
 cancel (Async t _) = throwTo t ThreadKilled
+
+-- | Cancel an asynchronous action
+--
+-- This is a variant of `cancel`, but it is not interruptible.
+{-# INLINE uninterruptibleCancel #-}
+uninterruptibleCancel :: Async a -> IO ()
+uninterruptibleCancel = uninterruptibleMask_ . cancel
 
 -- | Cancel an asynchronous action by throwing the supplied exception
 -- to it.
@@ -570,7 +577,7 @@ concurrently' left right collect = do
                              `catchAll` (putMVar done . Left)
         rid <- forkIO $ restore (right >>= putMVar done . Right . Right)
                              `catchAll` (putMVar done . Left)
-        let stop = killThread rid >> killThread lid
+        let stop = uninterruptibleMask_ (killThread rid >> killThread lid)
                    -- kill right before left, to match the semantics of
                    -- the version using withAsync. (#27)
         r <- restore (collect done) `onException` stop
