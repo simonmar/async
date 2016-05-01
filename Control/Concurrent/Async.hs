@@ -116,6 +116,7 @@ module Control.Concurrent.Async (
 
     -- * Convenient utilities
     race, race_, concurrently, mapConcurrently, forConcurrently,
+    mapConcurrently_, forConcurrently_,
     Concurrently(..),
 
   ) where
@@ -605,6 +606,16 @@ mapConcurrently f = runConcurrently . traverse (Concurrently . f)
 -- @since 2.1.0
 forConcurrently :: Traversable t => t a -> (a -> IO b)-> IO (t b)
 forConcurrently = flip mapConcurrently
+
+-- | `mapConcurrently_` is `mapConcurrently` with the return value discarded,
+-- just like @mapM_
+mapConcurrently_ :: Traversable t => (a -> IO b) -> t a -> IO ()
+mapConcurrently_ f t = mapConcurrently f t >> return ()
+
+-- | `forConcurrently_` is `forConcurrently` with the return value discarded,
+-- just like @forM_
+forConcurrently_ :: Traversable t => (a -> IO b) -> t a -> IO ()
+forConcurrently_ t f = forConcurrently f t >> return ()
 
 -- -----------------------------------------------------------------------------
 
