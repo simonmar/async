@@ -92,6 +92,9 @@ module Control.Concurrent.Async (
     -- ** Spawning with automatic 'cancel'ation
     withAsync, withAsyncBound, withAsyncOn, withAsyncWithUnmask, withAsyncOnWithUnmask,
 
+    -- ** Synchronous creation
+    sync, failed,
+
     -- ** Querying 'Async's
     wait, poll, waitCatch, cancel, uninterruptibleCancel, cancelWith,
     asyncThreadId,
@@ -185,6 +188,19 @@ asyncWithUnmask actionWith = asyncUsing rawForkIO (actionWith unsafeUnmask)
 -- The child thread is passed a function that can be used to unmask asynchronous exceptions.
 asyncOnWithUnmask :: Int -> ((forall b . IO b -> IO b) -> IO a) -> IO (Async a)
 asyncOnWithUnmask cpu actionWith = asyncUsing (rawForkOn cpu) (actionWith unsafeUnmask)
+
+endedSyncThreadId :: ThreadId
+endedSyncThreadId = unsafePerformIO $ forkIO $ pure ()
+{-# NOINLINE endedSyncThreadId #-}
+
+-- | Create 'Async' value from concrete value.
+-- This saves from thread spawning when the value is already computed.
+sync :: a -> Async a
+sync = Async endedSyncThreadId . pure . Right
+
+-- | Create failed 'Async'.
+failed :: Exception e => e -> Async a
+failed = Async endedSyncThreadId . pure . Left . SomeException
 
 asyncUsing :: (IO () -> IO ThreadId)
            -> IO a -> IO (Async a)

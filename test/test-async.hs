@@ -22,6 +22,10 @@ tests = [
   , testCase "async_waitCatch"   async_waitCatch
   , testCase "async_exwait"      async_exwait
   , testCase "async_exwaitCatch" async_exwaitCatch
+  , testCase "sync_wait"         sync_wait
+  , testCase "sync_throwTo"      sync_throwTo
+  , testCase "failed_exwait"     failed_exwait
+  , testCase "failed_exwaitCatch" failed_exwaitCatch
   , testCase "withasync_waitCatch" withasync_waitCatch
   , testCase "withasync_wait2"   withasync_wait2
   , testGroup "async_cancel_rep" $
@@ -51,6 +55,19 @@ async_wait = do
   r <- wait a
   assertEqual "async_wait" r value
 
+sync_wait :: Assertion
+sync_wait = do
+  let a = sync value
+  r <- wait a
+  assertEqual "sync_wait" r value
+
+sync_throwTo :: Assertion
+sync_throwTo = do
+  let a = sync value
+  throwTo (asyncThreadId a)  TestException
+  r <- wait a
+  assertEqual "sync_throwTo" r value
+
 async_exwaitCatch :: Assertion
 async_exwaitCatch = do
   a <- async (throwIO TestException)
@@ -63,6 +80,19 @@ async_exwait :: Assertion
 async_exwait = do
   a <- async (throwIO TestException)
   (wait a >> assertFailure "") `catch` \e -> e @?= TestException
+
+failed_exwait :: Assertion
+failed_exwait = do
+  let a = failed TestException
+  (wait a >> assertFailure "") `catch` \e -> e @?= TestException
+
+failed_exwaitCatch :: Assertion
+failed_exwaitCatch = do
+  let a = failed TestException
+  r <- waitCatch a
+  case r of
+    Left e  -> fromException e @?= Just TestException
+    Right _ -> assertFailure ""
 
 withasync_waitCatch :: Assertion
 withasync_waitCatch = do
