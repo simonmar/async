@@ -137,6 +137,7 @@ import Data.Traversable
 import Data.Semigroup (Semigroup((<>)))
 #endif
 
+import Data.IORef
 
 import GHC.Exts
 import GHC.IO hiding (finally, onException)
@@ -311,7 +312,7 @@ pollSTM (Async _ w) = (Just <$> w) `orElse` return Nothing
 --
 {-# INLINE cancel #-}
 cancel :: Async a -> IO ()
-cancel (Async t _) = throwTo t ThreadKilled
+cancel (Async t w) = throwTo t ThreadKilled <* atomically w
 
 -- | Cancel an asynchronous action
 --
@@ -549,7 +550,7 @@ concurrently left right =
 race left right = concurrently' left right collect
   where
     collect m = do
-        e <- takeMVar m
+        e <- m
         case e of
             Left ex -> throwIO ex
             Right r -> return r
@@ -563,13 +564,13 @@ concurrently left right = concurrently' left right (collect [])
     collect [Left a, Right b] _ = return (a,b)
     collect [Right b, Left a] _ = return (a,b)
     collect xs m = do
-        e <- takeMVar m
+        e <- m
         case e of
             Left ex -> throwIO ex
             Right r -> collect (r:xs) m
 
 concurrently' :: IO a -> IO b
-             -> (MVar (Either SomeException (Either a b)) -> IO r)
+             -> (IO (Either SomeException (Either a b)) -> IO r)
              -> IO r
 concurrently' left right collect = do
     done <- newEmptyMVar
@@ -578,10 +579,25 @@ concurrently' left right collect = do
                              `catchAll` (putMVar done . Left)
         rid <- forkIO $ restore (right >>= putMVar done . Right . Right)
                              `catchAll` (putMVar done . Left)
-        let stop = uninterruptibleMask_ (killThread rid >> killThread lid)
-                   -- kill right before left, to match the semantics of
-                   -- the version using withAsync. (#27)
-        r <- restore (collect done) `onException` stop
+
+        count <- newIORef (2 :: Int)
+        let takeDone = do
+                -- Decrement the counter so we know how many takes are left.
+                -- Since only the parent thread is calling this, we can
+                -- use non-atomic modifications.
+                modifyIORef count (subtract 1)
+
+                takeMVar done
+
+        let stop = do
+                -- kill right before left, to match the semantics of
+                -- the version using withAsync. (#27)
+                uninterruptibleMask_ (killThread rid >> killThread lid)
+
+                -- ensure the children are really dead
+                count' <- readIORef count
+                replicateM_ count' (takeMVar done)
+        r <- restore (collect takeDone) `onException` stop
         stop
         return r
 

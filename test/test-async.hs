@@ -8,6 +8,7 @@ import Test.HUnit
 
 import Control.Concurrent.Async
 import Control.Exception
+import Data.IORef
 import Data.Typeable
 import Control.Concurrent
 import Control.Monad
@@ -30,6 +31,14 @@ tests = [
   , testCase "async_poll"        async_poll
   , testCase "async_poll2"       async_poll2
   , testCase "withasync_waitCatch_blocked" withasync_waitCatch_blocked
+  , testGroup "children surviving too long"
+      [ testCase "concurrently+success" concurrently_success
+      , testCase "concurrently+failure" concurrently_failure
+      , testCase "race+success" race_success
+      , testCase "race+failure" race_failure
+      , testCase "cancel" cancel_survive
+      , testCase "withAsync" withasync_survive
+      ]
  ]
 
 value = 42 :: Int
@@ -115,3 +124,83 @@ withasync_waitCatch_blocked = do
             Just BlockedIndefinitelyOnMVar -> return ()
             Nothing -> assertFailure $ show e
     Right () -> assertFailure ""
+
+concurrently_success :: Assertion
+concurrently_success = do
+  finalRes <- newIORef "never filled"
+  baton <- newEmptyMVar
+  let quick = return ()
+      slow = threadDelay 10000 `finally` do
+        threadDelay 10000
+        writeIORef finalRes "slow"
+        putMVar baton ()
+  _ <- concurrently quick slow
+  writeIORef finalRes "parent"
+  takeMVar baton
+  res <- readIORef finalRes
+  res @?= "parent"
+
+concurrently_failure :: Assertion
+concurrently_failure = do
+  finalRes <- newIORef "never filled"
+  let quick = error "a quick death"
+      slow = threadDelay 10000 `finally` do
+        threadDelay 10000
+        writeIORef finalRes "slow"
+  _ :: Either SomeException ((), ()) <- try (concurrently quick slow)
+  writeIORef finalRes "parent"
+  threadDelay 1000000 -- not using the baton, can lead to deadlock detection
+  res <- readIORef finalRes
+  res @?= "parent"
+
+race_success :: Assertion
+race_success = do
+  finalRes <- newIORef "never filled"
+  let quick = return ()
+      slow = threadDelay 10000 `finally` do
+        threadDelay 10000
+        writeIORef finalRes "slow"
+  race_ quick slow
+  writeIORef finalRes "parent"
+  threadDelay 1000000 -- not using the baton, can lead to deadlock detection
+  res <- readIORef finalRes
+  res @?= "parent"
+
+race_failure :: Assertion
+race_failure = do
+  finalRes <- newIORef "never filled"
+  baton <- newEmptyMVar
+  let quick = error "a quick death"
+      slow = threadDelay 10000 `finally` do
+        threadDelay 10000
+        writeIORef finalRes "slow"
+        putMVar baton ()
+  _ :: Either SomeException () <- try (race_ quick slow)
+  writeIORef finalRes "parent"
+  takeMVar baton
+  res <- readIORef finalRes
+  res @?= "parent"
+
+cancel_survive :: Assertion
+cancel_survive = do
+  finalRes <- newIORef "never filled"
+  a <- async $ threadDelay 10000 `finally` do
+        threadDelay 10000
+        writeIORef finalRes "child"
+  cancel a
+  writeIORef finalRes "parent"
+  threadDelay 1000000 -- not using the baton, can lead to deadlock detection
+  res <- readIORef finalRes
+  res @?= "parent"
+
+withasync_survive :: Assertion
+withasync_survive = do
+  finalRes <- newIORef "never filled"
+  let child = threadDelay 10000 `finally` do
+        threadDelay 10000
+        writeIORef finalRes "child"
+  withAsync child (\_ -> return ())
+  writeIORef finalRes "parent"
+  threadDelay 1000000 -- not using the baton, can lead to deadlock detection
+  res <- readIORef finalRes
+  res @?= "parent"
