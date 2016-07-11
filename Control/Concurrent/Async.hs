@@ -53,15 +53,15 @@
 -- >       ...
 --
 -- 'withAsync' is like 'async', except that the 'Async' is
--- automatically killed (using 'uninterruptibleCancel') if the enclosing IO operation
--- returns before it has completed.  Consider the case when the first
--- 'wait' throws an exception; then the second 'Async' will be
--- automatically killed rather than being left to run in the
--- background, possibly indefinitely.  This is the second way that the
--- library provides additional safety: using 'withAsync' means we can
--- avoid accidentally leaving threads running.  Furthermore,
--- 'withAsync' allows a tree of threads to be built, such that
--- children are automatically killed if their parents die for any
+-- automatically killed (using 'uninterruptibleCancel') if the
+-- enclosing IO opercation returns before it has completed.  Consider
+-- the case when the first 'wait' throws an exception; then the second
+-- 'Async' will be automatically killed rather than being left to run
+-- in the background, possibly indefinitely.  This is the second way
+-- that the library provides additional safety: using 'withAsync'
+-- means we can avoid accidentally leaving threads running.
+-- Furthermore, 'withAsync' allows a tree of threads to be built, such
+-- that children are automatically killed if their parents die for any
 -- reason.
 --
 -- The pattern of performing two IO actions concurrently and waiting
@@ -90,7 +90,8 @@ module Control.Concurrent.Async (
     async, asyncBound, asyncOn, asyncWithUnmask, asyncOnWithUnmask,
 
     -- ** Spawning with automatic 'cancel'ation
-    withAsync, withAsyncBound, withAsyncOn, withAsyncWithUnmask, withAsyncOnWithUnmask,
+    withAsync, withAsyncBound, withAsyncOn, withAsyncWithUnmask,
+    withAsyncOnWithUnmask,
 
     -- ** Querying 'Async's
     wait, poll, waitCatch, cancel, uninterruptibleCancel, cancelWith,
@@ -156,9 +157,12 @@ import GHC.Conc
 -- operations are provided for waiting for asynchronous actions to
 -- complete and obtaining their results (see e.g. 'wait').
 --
-data Async a = Async { asyncThreadId :: {-# UNPACK #-} !ThreadId
-                       -- ^ Returns the 'ThreadId' of the thread running the given 'Async'.
-                     , _asyncWait    :: STM (Either SomeException a) }
+data Async a = Async
+  { asyncThreadId :: {-# UNPACK #-} !ThreadId
+                  -- ^ Returns the 'ThreadId' of the thread running
+                  -- the given 'Async'.
+  , _asyncWait    :: STM (Either SomeException a)
+  }
 
 instance Eq (Async a) where
   Async a _ == Async b _  =  a == b
@@ -181,15 +185,18 @@ asyncBound = asyncUsing forkOS
 asyncOn :: Int -> IO a -> IO (Async a)
 asyncOn = asyncUsing . rawForkOn
 
--- | Like 'async' but using 'forkIOWithUnmask' internally.
--- The child thread is passed a function that can be used to unmask asynchronous exceptions.
+-- | Like 'async' but using 'forkIOWithUnmask' internally.  The child
+-- thread is passed a function that can be used to unmask asynchronous
+-- exceptions.
 asyncWithUnmask :: ((forall b . IO b -> IO b) -> IO a) -> IO (Async a)
 asyncWithUnmask actionWith = asyncUsing rawForkIO (actionWith unsafeUnmask)
 
--- | Like 'asyncOn' but using 'forkOnWithUnmask' internally.
--- The child thread is passed a function that can be used to unmask asynchronous exceptions.
+-- | Like 'asyncOn' but using 'forkOnWithUnmask' internally.  The
+-- child thread is passed a function that can be used to unmask
+-- asynchronous exceptions.
 asyncOnWithUnmask :: Int -> ((forall b . IO b -> IO b) -> IO a) -> IO (Async a)
-asyncOnWithUnmask cpu actionWith = asyncUsing (rawForkOn cpu) (actionWith unsafeUnmask)
+asyncOnWithUnmask cpu actionWith =
+  asyncUsing (rawForkOn cpu) (actionWith unsafeUnmask)
 
 asyncUsing :: (IO () -> IO ThreadId)
            -> IO a -> IO (Async a)
@@ -221,15 +228,21 @@ withAsyncBound = withAsyncUsing forkOS
 withAsyncOn :: Int -> IO a -> (Async a -> IO b) -> IO b
 withAsyncOn = withAsyncUsing . rawForkOn
 
--- | Like 'withAsync' but uses 'forkIOWithUnmask' internally.
--- The child thread is passed a function that can be used to unmask asynchronous exceptions.
-withAsyncWithUnmask :: ((forall c. IO c -> IO c) -> IO a) -> (Async a -> IO b) -> IO b
-withAsyncWithUnmask actionWith = withAsyncUsing rawForkIO (actionWith unsafeUnmask)
+-- | Like 'withAsync' but uses 'forkIOWithUnmask' internally.  The
+-- child thread is passed a function that can be used to unmask
+-- asynchronous exceptions.
+withAsyncWithUnmask
+  :: ((forall c. IO c -> IO c) -> IO a) -> (Async a -> IO b) -> IO b
+withAsyncWithUnmask actionWith =
+  withAsyncUsing rawForkIO (actionWith unsafeUnmask)
 
--- | Like 'withAsyncOn' but uses 'forkOnWithUnmask' internally.
--- The child thread is passed a function that can be used to unmask asynchronous exceptions
-withAsyncOnWithUnmask :: Int -> ((forall c. IO c -> IO c) -> IO a) -> (Async a -> IO b) -> IO b
-withAsyncOnWithUnmask cpu actionWith = withAsyncUsing (rawForkOn cpu) (actionWith unsafeUnmask)
+-- | Like 'withAsyncOn' but uses 'forkOnWithUnmask' internally.  The
+-- child thread is passed a function that can be used to unmask
+-- asynchronous exceptions
+withAsyncOnWithUnmask
+  :: Int -> ((forall c. IO c -> IO c) -> IO a) -> (Async a -> IO b) -> IO b
+withAsyncOnWithUnmask cpu actionWith =
+  withAsyncUsing (rawForkOn cpu) (actionWith unsafeUnmask)
 
 withAsyncUsing :: (IO () -> IO ThreadId)
                -> IO a -> (Async a -> IO b) -> IO b
