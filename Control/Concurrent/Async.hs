@@ -53,7 +53,7 @@
 -- >       ...
 --
 -- 'withAsync' is like 'async', except that the 'Async' is
--- automatically killed (using 'uninterruptibleCancel') if the enclosing IO operation
+-- automatically killed (using 'cancel') if the enclosing IO operation
 -- returns before it has completed.  Consider the case when the first
 -- 'wait' throws an exception; then the second 'Async' will be
 -- automatically killed rather than being left to run in the
@@ -93,7 +93,7 @@ module Control.Concurrent.Async (
     withAsync, withAsyncBound, withAsyncOn, withAsyncWithUnmask, withAsyncOnWithUnmask,
 
     -- ** Querying 'Async's
-    wait, poll, waitCatch, cancel, uninterruptibleCancel, cancelWith,
+    wait, poll, waitCatch, cancel, interruptibleCancel, cancelWith,
     asyncThreadId,
 
     -- ** STM operations
@@ -199,9 +199,9 @@ asyncUsing doFork = \action -> do
 
 -- | Spawn an asynchronous action in a separate thread, and pass its
 -- @Async@ handle to the supplied function.  When the function returns
--- or throws an exception, 'uninterruptibleCancel' is called on the @Async@.
+-- or throws an exception, 'cancel' is called on the @Async@.
 --
--- > withAsync action inner = bracket (async action) uninterruptibleCancel inner
+-- > withAsync action inner = bracket (async action) cancel inner
 --
 -- This is a useful variant of 'async' that ensures an @Async@ is
 -- never left running unintentionally.
@@ -237,9 +237,9 @@ withAsyncUsing doFork = \action inner -> do
     t <- doFork $ try (restore action) >>= atomically . putTMVar var
     let a = Async t (readTMVar var)
     r <- restore (inner a) `catchAll` \e -> do
-      uninterruptibleCancel a
+      cancel a
       throwIO e
-    uninterruptibleCancel a
+    cancel a
     return r
 
 -- | Wait for an asynchronous action to complete, and return its
@@ -296,30 +296,37 @@ pollSTM :: Async a -> STM (Maybe (Either SomeException a))
 pollSTM (Async _ w) = (Just <$> w) `orElse` return Nothing
 
 -- | Cancel an asynchronous action by throwing the @ThreadKilled@
--- exception to it.  Has no effect if the 'Async' has already
--- completed.
+-- exception to it, and waiting for the `Async` thread to quit.
+-- Has no effect if the 'Async' has already completed.
 --
--- > cancel a = throwTo (asyncThreadId a) ThreadKilled
+-- > cancel a = throwTo (asyncThreadId a) ThreadKilled <* waitCatch w
 --
--- Note that 'cancel' is synchronous in the same sense as 'throwTo'.
--- It does not return until the exception has been thrown in the
--- target thread, or the target thread has completed.  In particular,
--- if the target thread is making a foreign call, the exception will
--- not be thrown until the foreign call returns, and in this case
--- 'cancel' may block indefinitely.  An asynchronous 'cancel' can
--- of course be obtained by wrapping 'cancel' itself in 'async'.
--- See also `uninterruptibleCancel`.
+-- Note that 'cancel' will not terminate until the thread the 'Async'
+-- refers to has terminated. This means that 'cancel' will block for
+-- as long said thread blocks when receiving an asynchronous exception.
 --
+-- For example, it could block if:
+--
+-- * It's executing a foreign call, and thus cannot receive the asynchronous
+-- exception;
+-- * It's executing some cleanup handler after having received the exception,
+-- and the handler is blocking.
+--
+-- Moreover, 'cancel' is run in 'uninterruptibleMask', since having 'cancel'
+-- to be interruptible can lead to subtle bugs where `Async` threads outlive
+-- their desired scope. See <https://github.com/simonmar/async/issues/24> for
+-- an example of such a situation. See 'interruptibleCancel' for an interruptible
+-- version.
 {-# INLINE cancel #-}
 cancel :: Async a -> IO ()
-cancel (Async t w) = throwTo t ThreadKilled <* atomically w
+cancel = uninterruptibleMask_ . interruptibleCancel
 
--- | Cancel an asynchronous action
+-- | Cancel an asynchronous action.
 --
--- This is a variant of `cancel`, but it is not interruptible.
-{-# INLINE uninterruptibleCancel #-}
-uninterruptibleCancel :: Async a -> IO ()
-uninterruptibleCancel = uninterruptibleMask_ . cancel
+-- This is a variant of `cancel`, but it is interruptible.
+{-# INLINE interruptibleCancel #-}
+interruptibleCancel :: Async a -> IO ()
+interruptibleCancel a@(Async t _) = throwTo t ThreadKilled <* waitCatch a
 
 -- | Cancel an asynchronous action by throwing the supplied exception
 -- to it.
@@ -592,11 +599,11 @@ concurrently' left right collect = do
         let stop = do
                 -- kill right before left, to match the semantics of
                 -- the version using withAsync. (#27)
-                uninterruptibleMask_ (killThread rid >> killThread lid)
-
-                -- ensure the children are really dead
-                count' <- readIORef count
-                replicateM_ count' (takeMVar done)
+                uninterruptibleMask_ $ do
+                  killThread rid >> killThread lid
+                  -- ensure the children are really dead
+                  count' <- readIORef count
+                  replicateM_ count' (takeMVar done)
         r <- restore (collect takeDone) `onException` stop
         stop
         return r
