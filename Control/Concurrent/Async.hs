@@ -296,23 +296,24 @@ pollSTM :: Async a -> STM (Maybe (Either SomeException a))
 pollSTM (Async _ w) = (Just <$> w) `orElse` return Nothing
 
 -- | Cancel an asynchronous action by throwing the @ThreadKilled@
--- exception to it.  Has no effect if the 'Async' has already
--- completed.
+-- exception to it, and waiting for the `Async` thread to quit.
+-- Has no effect if the 'Async' has already completed.
 --
--- > cancel a = throwTo (asyncThreadId a) ThreadKilled
+-- > cancel a = throwTo (asyncThreadId a) ThreadKilled <* waitCatch w
 --
--- Note that 'cancel' is synchronous in the same sense as 'throwTo'.
--- It does not return until the exception has been thrown in the
--- target thread, or the target thread has completed.  In particular,
--- if the target thread is making a foreign call, the exception will
--- not be thrown until the foreign call returns, and in this case
--- 'cancel' may block indefinitely.  An asynchronous 'cancel' can
--- of course be obtained by wrapping 'cancel' itself in 'async'.
--- See also `uninterruptibleCancel`.
+-- Note that 'cancel' will not terminate until the thread the 'Async'
+-- refers to has terminated. This means that 'cancel' will block for
+-- as long said thread blocks when receiving an asynchronous exception.
 --
+-- For example, it could block if:
+--
+-- * It's executing a foreign call, and thus cannot receive the asynchronous
+-- exception;
+-- * It's executing some cleanup handler after having received the exception,
+-- and the handler is blocking.
 {-# INLINE cancel #-}
 cancel :: Async a -> IO ()
-cancel (Async t w) = throwTo t ThreadKilled <* atomically w
+cancel a@(Async t _) = throwTo t ThreadKilled <* waitCatch a
 
 -- | Cancel an asynchronous action
 --
