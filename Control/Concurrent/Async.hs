@@ -592,11 +592,11 @@ concurrently' left right collect = do
         let stop = do
                 -- kill right before left, to match the semantics of
                 -- the version using withAsync. (#27)
-                uninterruptibleMask_ (killThread rid >> killThread lid)
-
-                -- ensure the children are really dead
-                count' <- readIORef count
-                replicateM_ count' (takeMVar done)
+                uninterruptibleMask_ $ do
+                  killThread rid >> killThread lid
+                  -- ensure the children are really dead
+                  count' <- readIORef count
+                  replicateM_ count' (takeMVar done)
         r <- restore (collect takeDone) `onException` stop
         stop
         return r
