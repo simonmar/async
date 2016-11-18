@@ -175,11 +175,13 @@ race_failure = do
   finalRes <- newIORef "never filled"
   baton <- newEmptyMVar
   let quick = error "a quick death"
-      slow = threadDelay 10000 `finally` do
+      slow restore = restore (threadDelay 10000) `finally` do
         threadDelay 10000
         writeIORef finalRes "slow"
         putMVar baton ()
-  _ :: Either SomeException () <- try (race_ quick slow)
+  _ :: Either SomeException () <-
+    try $ mask $ \restore ->
+       race_ quick (slow restore)
   writeIORef finalRes "parent"
   takeMVar baton
   res <- readIORef finalRes
