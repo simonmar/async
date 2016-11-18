@@ -5,6 +5,10 @@
  - Add `replicateConcurrently_`
  - Fix incorrect argument order in `forConcurrently_`
  - Generalize `mapConcurrently_` and `forConcurrently_` to `Foldable`
+ - `withAsync` now reliably kills the thread, by using an
+   uninterruptible cancel
+ - Make `cancel` wait for the thread to finish, and adjust
+   'concurrently' to match
 
 ## Changes in 2.1.0:
 
