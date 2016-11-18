@@ -1,3 +1,9 @@
+## Changes in 2.1.1:
+
+ - Add `concurrently_`
+ - Add `replicateConcurrently`
+ - Add `replicateConcurrently_`
+
 ## Changes in 2.1.0:
 
  - Bump base dependency to allow 4.10

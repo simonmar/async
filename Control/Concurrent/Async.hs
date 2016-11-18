@@ -115,8 +115,11 @@ module Control.Concurrent.Async (
     link, link2,
 
     -- * Convenient utilities
-    race, race_, concurrently, mapConcurrently, forConcurrently,
+    race, race_,
+    concurrently, concurrently_,
+    mapConcurrently, forConcurrently,
     mapConcurrently_, forConcurrently_,
+    replicateConcurrently, replicateConcurrently_,
     Concurrently(..),
 
   ) where
@@ -124,6 +127,7 @@ module Control.Concurrent.Async (
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Concurrent
+import qualified Data.Foldable as F
 #if !MIN_VERSION_base(4,6,0)
 import Prelude hiding (catch)
 #endif
@@ -633,6 +637,25 @@ mapConcurrently_ f t = mapConcurrently f t >> return ()
 -- just like @forM_
 forConcurrently_ :: Traversable t => (a -> IO b) -> t a -> IO ()
 forConcurrently_ t f = forConcurrently f t >> return ()
+
+-- | 'concurrently', but ignore the result values
+--
+-- @since 2.1.1
+concurrently_ :: IO a -> IO b -> IO ()
+-- could consider a more optimized implementation in the future if desired
+concurrently_ left right = void (concurrently left right)
+
+-- | Perform the action in the given number of threads.
+--
+-- @since 2.1.1
+replicateConcurrently :: Int -> IO a -> IO [a]
+replicateConcurrently cnt = runConcurrently . sequenceA . replicate cnt . Concurrently
+
+-- | Same as 'replicateConcurrently', but ignore the results.
+--
+-- @since 2.1.1
+replicateConcurrently_ :: Int -> IO a -> IO ()
+replicateConcurrently_ cnt = runConcurrently . F.fold . replicate cnt . Concurrently . void
 
 -- -----------------------------------------------------------------------------
 
