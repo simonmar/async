@@ -3,6 +3,7 @@
  - Add `concurrently_`
  - Add `replicateConcurrently`
  - Add `replicateConcurrently_`
+ - Fix incorrect argument order in `forConcurrently_`
 
 ## Changes in 2.1.0:
 

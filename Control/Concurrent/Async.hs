@@ -635,8 +635,8 @@ mapConcurrently_ f t = mapConcurrently f t >> return ()
 
 -- | `forConcurrently_` is `forConcurrently` with the return value discarded,
 -- just like @forM_
-forConcurrently_ :: Traversable t => (a -> IO b) -> t a -> IO ()
-forConcurrently_ t f = forConcurrently f t >> return ()
+forConcurrently_ :: Traversable t => t a -> (a -> IO b) -> IO ()
+forConcurrently_ t f = forConcurrently t f >> return ()
 
 -- | 'concurrently', but ignore the result values
 --
