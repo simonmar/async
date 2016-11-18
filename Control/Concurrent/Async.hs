@@ -642,8 +642,14 @@ forConcurrently_ = flip mapConcurrently_
 --
 -- @since 2.1.1
 concurrently_ :: IO a -> IO b -> IO ()
--- could consider a more optimized implementation in the future if desired
-concurrently_ left right = void (concurrently left right)
+concurrently_ left right = concurrently' left right (collect 0)
+  where
+    collect 2 _ = return ()
+    collect i m = do
+        e <- m
+        case e of
+            Left ex -> throwIO ex
+            Right _ -> collect (i + 1 :: Int) m
 
 -- | Perform the action in the given number of threads.
 --
