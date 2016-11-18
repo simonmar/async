@@ -4,6 +4,7 @@
  - Add `replicateConcurrently`
  - Add `replicateConcurrently_`
  - Fix incorrect argument order in `forConcurrently_`
+ - Generalize `mapConcurrently_` and `forConcurrently_` to `Foldable`
 
 ## Changes in 2.1.0:
 
