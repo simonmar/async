@@ -1,3 +1,11 @@
+## Changes in 2.1.1:
+
+ - Add `concurrently_`
+ - Add `replicateConcurrently`
+ - Add `replicateConcurrently_`
+ - Fix incorrect argument order in `forConcurrently_`
+ - Generalize `mapConcurrently_` and `forConcurrently_` to `Foldable`
+
 ## Changes in 2.1.0:
 
  - Bump base dependency to allow 4.10

@@ -12,6 +12,7 @@ import Data.IORef
 import Data.Typeable
 import Control.Concurrent
 import Control.Monad
+import Data.List (sort)
 import Data.Maybe
 
 import Prelude hiding (catch)
@@ -39,6 +40,9 @@ tests = [
       , testCase "cancel" cancel_survive
       , testCase "withAsync" withasync_survive
       ]
+  , testCase "concurrently_" case_concurrently_
+  , testCase "replicateConcurrently_" case_replicateConcurrently
+  , testCase "replicateConcurrently" case_replicateConcurrently_
  ]
 
 value = 42 :: Int
@@ -204,3 +208,29 @@ withasync_survive = do
   threadDelay 1000000 -- not using the baton, can lead to deadlock detection
   res <- readIORef finalRes
   res @?= "parent"
+
+case_concurrently_ :: Assertion
+case_concurrently_ = do
+  ref <- newIORef 0
+  () <- concurrently_
+    (atomicModifyIORef ref (\x -> (x + 1, True)))
+    (atomicModifyIORef ref (\x -> (x + 2, 'x')))
+  res <- readIORef ref
+  res @?= 3
+
+case_replicateConcurrently :: Assertion
+case_replicateConcurrently = do
+  ref <- newIORef 0
+  let action = atomicModifyIORef ref (\x -> (x + 1, x + 1))
+  resList <- replicateConcurrently 100 action
+  resVal <- readIORef ref
+  resVal @?= 100
+  sort resList @?= [1..100]
+
+case_replicateConcurrently_ :: Assertion
+case_replicateConcurrently_ = do
+  ref <- newIORef 0
+  let action = atomicModifyIORef ref (\x -> (x + 1, x + 1))
+  () <- replicateConcurrently_ 100 action
+  resVal <- readIORef ref
+  resVal @?= 100

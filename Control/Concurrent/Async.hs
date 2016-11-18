@@ -115,8 +115,11 @@ module Control.Concurrent.Async (
     link, link2,
 
     -- * Convenient utilities
-    race, race_, concurrently, mapConcurrently, forConcurrently,
+    race, race_,
+    concurrently, concurrently_,
+    mapConcurrently, forConcurrently,
     mapConcurrently_, forConcurrently_,
+    replicateConcurrently, replicateConcurrently_,
     Concurrently(..),
 
   ) where
@@ -124,6 +127,7 @@ module Control.Concurrent.Async (
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Concurrent
+import qualified Data.Foldable as F
 #if !MIN_VERSION_base(4,6,0)
 import Prelude hiding (catch)
 #endif
@@ -626,13 +630,38 @@ forConcurrently = flip mapConcurrently
 
 -- | `mapConcurrently_` is `mapConcurrently` with the return value discarded,
 -- just like @mapM_
-mapConcurrently_ :: Traversable t => (a -> IO b) -> t a -> IO ()
-mapConcurrently_ f t = mapConcurrently f t >> return ()
+mapConcurrently_ :: F.Foldable f => (a -> IO b) -> f a -> IO ()
+mapConcurrently_ f = runConcurrently . F.foldMap (Concurrently . void . f)
 
 -- | `forConcurrently_` is `forConcurrently` with the return value discarded,
 -- just like @forM_
-forConcurrently_ :: Traversable t => (a -> IO b) -> t a -> IO ()
-forConcurrently_ t f = forConcurrently f t >> return ()
+forConcurrently_ :: F.Foldable f => f a -> (a -> IO b) -> IO ()
+forConcurrently_ = flip mapConcurrently_
+
+-- | 'concurrently', but ignore the result values
+--
+-- @since 2.1.1
+concurrently_ :: IO a -> IO b -> IO ()
+concurrently_ left right = concurrently' left right (collect 0)
+  where
+    collect 2 _ = return ()
+    collect i m = do
+        e <- m
+        case e of
+            Left ex -> throwIO ex
+            Right _ -> collect (i + 1 :: Int) m
+
+-- | Perform the action in the given number of threads.
+--
+-- @since 2.1.1
+replicateConcurrently :: Int -> IO a -> IO [a]
+replicateConcurrently cnt = runConcurrently . sequenceA . replicate cnt . Concurrently
+
+-- | Same as 'replicateConcurrently', but ignore the results.
+--
+-- @since 2.1.1
+replicateConcurrently_ :: Int -> IO a -> IO ()
+replicateConcurrently_ cnt = runConcurrently . F.fold . replicate cnt . Concurrently . void
 
 -- -----------------------------------------------------------------------------
 
