@@ -347,7 +347,7 @@ uninterruptibleCancel = uninterruptibleMask_ . cancel
 -- The notes about the synchronous nature of 'cancel' also apply to
 -- 'cancelWith'.
 cancelWith :: Exception e => Async a -> e -> IO ()
-cancelWith (Async t _) e = throwTo t e
+cancelWith a@(Async t _) e = throwTo t e <* waitCatch a
 
 -- | Wait for any of the supplied asynchronous operations to complete.
 -- The value returned is a pair of the 'Async' that completed, and the
