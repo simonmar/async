@@ -316,7 +316,7 @@ pollSTM (Async _ w) = (Just <$> w) `orElse` return Nothing
 -- exception to it, and waiting for the `Async` thread to quit.
 -- Has no effect if the 'Async' has already completed.
 --
--- > cancel a = throwTo (asyncThreadId a) ThreadKilled <* waitCatch w
+-- > cancel a = throwTo (asyncThreadId a) ThreadKilled <* waitCatch a
 --
 -- Note that 'cancel' will not terminate until the thread the 'Async'
 -- refers to has terminated. This means that 'cancel' will block for
