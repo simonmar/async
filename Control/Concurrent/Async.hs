@@ -54,7 +54,7 @@
 --
 -- 'withAsync' is like 'async', except that the 'Async' is
 -- automatically killed (using 'uninterruptibleCancel') if the
--- enclosing IO opercation returns before it has completed.  Consider
+-- enclosing IO operation returns before it has completed.  Consider
 -- the case when the first 'wait' throws an exception; then the second
 -- 'Async' will be automatically killed rather than being left to run
 -- in the background, possibly indefinitely.  This is the second way
