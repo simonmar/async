@@ -600,12 +600,15 @@ concurrently' left right collect = do
 
         count <- newIORef (2 :: Int)
         let takeDone = do
-                -- Decrement the counter so we know how many takes are left.
-                -- Since only the parent thread is calling this, we can
-                -- use non-atomic modifications.
-                modifyIORef count (subtract 1)
-
-                takeMVar done
+                mask_ $ do
+                  res <- takeMVar done
+                  -- Decrement the counter so we know how many takes are left.
+                  -- It is important to do that after `takeMVar` because it
+                  -- count be interrupted. (#59)
+                  -- Since only the parent thread is calling this, we can
+                  -- use non-atomic modifications.
+                  modifyIORef count (subtract 1)
+                  return res
 
         let stop = do
                 -- kill right before left, to match the semantics of
