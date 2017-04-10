@@ -1,3 +1,7 @@
+## Changes in 2.1.1.1:
+ - Make 'cancelWith' wait for the cancelled thread to terminate, like 'cancel'
+ - Updates to dependency bounds for GHC 8.2
+
 ## Changes in 2.1.1:
 
  - Add `concurrently_`
