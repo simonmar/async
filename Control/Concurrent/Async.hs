@@ -116,7 +116,7 @@ module Control.Concurrent.Async (
     link, link2,
 
     -- * Convenient utilities
-    race, race_,
+    race, race', race_,
     concurrently, concurrently_,
     mapConcurrently, forConcurrently,
     mapConcurrently_, forConcurrently_,
@@ -525,6 +525,10 @@ link2 left@(Async tl _)  right@(Async tr _) =
 --
 race :: IO a -> IO b -> IO (Either a b)
 
+-- | Like 'race' but do not distinguish between the two possible results
+--
+race' :: IO a -> IO a -> IO a
+
 -- | Like 'race', but the result is ignored.
 --
 race_ :: IO a -> IO b -> IO ()
@@ -549,6 +553,11 @@ race left right =
   withAsync right $ \b ->
   waitEither a b
 
+race' left right =
+  withAsync left $ \a
+  withAsync right $ \b
+  fmap (either id id) $ waitEither a b
+
 race_ left right =
   withAsync left $ \a ->
   withAsync right $ \b ->
@@ -572,6 +581,9 @@ race left right = concurrently' left right collect
         case e of
             Left ex -> throwIO ex
             Right r -> return r
+
+-- race' :: IO a -> IO a -> IO a
+race' left right = fmap (either id id) (race left right)
 
 -- race_ :: IO a -> IO b -> IO ()
 race_ left right = void $ race left right
