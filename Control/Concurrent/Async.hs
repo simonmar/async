@@ -122,6 +122,7 @@ module Control.Concurrent.Async (
     mapConcurrently_, forConcurrently_,
     replicateConcurrently, replicateConcurrently_,
     Concurrently(..),
+    compareAsyncs,
 
   ) where
 
@@ -172,6 +173,10 @@ instance Ord (Async a) where
 
 instance Functor Async where
   fmap f (Async a w) = Async a (fmap (fmap f) w)
+
+-- | Compare two 'Async's that may have different types
+compareAsyncs :: Async a -> Async b -> Ordering
+compareAsyncs (Async t1 _) (Async t2 _) = compare t1 t2
 
 -- | Spawn an asynchronous action in a separate thread.
 async :: IO a -> IO (Async a)
