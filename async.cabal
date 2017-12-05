@@ -59,6 +59,7 @@ test-suite test-async
     main-is:    test-async.hs
     build-depends: base >= 4.3 && < 4.11,
                    async,
+                   stm,
                    test-framework,
                    test-framework-hunit,
                    HUnit

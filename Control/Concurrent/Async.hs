@@ -660,10 +660,16 @@ concurrently' :: IO a -> IO b
 concurrently' left right collect = do
     done <- newEmptyMVar
     mask $ \restore -> do
-        lid <- forkIO $ restore (left >>= putMVar done . Right . Left)
-                             `catchAll` (putMVar done . Left)
-        rid <- forkIO $ restore (right >>= putMVar done . Right . Right)
-                             `catchAll` (putMVar done . Left)
+        -- Note: uninterruptibleMask here is because we must not allow
+        -- the putMVar in the exception handler to be interrupted,
+        -- otherwise the parent thread will deadlock when it waits for
+        -- the thread to terminate.
+        lid <- forkIO $ uninterruptibleMask_ $
+          restore (left >>= putMVar done . Right . Left)
+            `catchAll` (putMVar done . Left)
+        rid <- forkIO $ uninterruptibleMask_ $
+          restore (right >>= putMVar done . Right . Right)
+            `catchAll` (putMVar done . Left)
 
         count <- newIORef (2 :: Int)
         let takeDone = do
@@ -676,16 +682,23 @@ concurrently' left right collect = do
                 modifyIORef count (subtract 1)
                 return r
 
+        let tryAgain f = f `catch` \BlockedIndefinitelyOnMVar -> f
 
-        let stop = do
+            stop = do
                 -- kill right before left, to match the semantics of
                 -- the version using withAsync. (#27)
                 uninterruptibleMask_ $ do
-                  killThread rid >> killThread lid
-                  -- ensure the children are really dead
                   count' <- readIORef count
-                  replicateM_ count' (takeMVar done)
-        r <- collect takeDone `onException` stop
+                  -- we only need to use killThread if there are still
+                  -- children alive.  Note: forkIO here is because the
+                  -- child thread could be in an uninterruptible
+                  -- putMVar.
+                  when (count' > 0) $
+                    void $ forkIO $ killThread rid >> killThread lid
+                  -- ensure the children are really dead
+                  replicateM_ count' (tryAgain $ takeMVar done)
+
+        r <- collect (tryAgain $ takeDone) `onException` stop
         stop
         return r
 

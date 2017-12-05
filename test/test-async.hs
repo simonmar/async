@@ -6,6 +6,7 @@ import Test.Framework.Providers.HUnit
 
 import Test.HUnit
 
+import Control.Concurrent.STM
 import Control.Concurrent.Async
 import Control.Exception
 import Data.IORef
@@ -47,6 +48,7 @@ tests = [
   , testCase "link1" case_link1
   , testCase "link2" case_link2
   , testCase "link1_cancel" case_link1cancel
+  , testCase "concurrently_deadlock" case_concurrently_deadlock
  ]
 
 value = 42 :: Int
@@ -323,4 +325,15 @@ case_link1cancel = do
   assertBool "link1cancel" $
     case e of
       Left AsyncCancelled -> True  -- should not be ExceptionInLinkedThread
+      _other -> False
+
+-- See Issue #62
+case_concurrently_deadlock :: Assertion
+case_concurrently_deadlock = do
+  tvar <- newTVarIO False :: IO (TVar Bool)
+  e <- try $ void $ join (concurrently) (atomically $ readTVar tvar >>= check)
+    -- should throw BlockedIndefinitelyOnSTM not BlockedIndefinitelyOnMVar
+  assertBool "concurrently_deadlock" $
+    case e of
+      Left BlockedIndefinitelyOnSTM{} -> True
       _other -> False
