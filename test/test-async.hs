@@ -112,7 +112,7 @@ async_cancelmany :: Assertion -- issue 59
 async_cancelmany = do
   r <- newIORef []
   a <- async $ forConcurrently_ ['a'..'z'] $ \c ->
-    delay 2 `finally` atomicModifyIORef' r (\i -> (c:i,()))
+    delay 2 `finally` atomicModifyIORef r (\i -> (c:i,()))
   delay 1
   cancel a
   v <- readIORef r
