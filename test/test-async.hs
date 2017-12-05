@@ -29,6 +29,7 @@ tests = [
   , testGroup "async_cancel_rep" $
       replicate 1000 $
          testCase "async_cancel"       async_cancel
+  , testCase "async_cancelmany" async_cancelmany
   , testCase "async_poll"        async_poll
   , testCase "async_poll2"       async_poll2
   , testCase "withasync_waitCatch_blocked" withasync_waitCatch_blocked
@@ -104,6 +105,18 @@ async_cancel = do
   case r of
     Left e -> fromException e @?= Just TestException
     Right r -> r @?= value
+
+async_cancelmany :: Assertion -- issue 59
+async_cancelmany = do
+  r <- newIORef []
+  a <- async $ forConcurrently_ ['a'..'z'] $ \c ->
+    delay 2 `finally` atomicModifyIORef' r (\i -> (c:i,()))
+  delay 1
+  cancel a
+  v <- readIORef r
+  assertEqual "cancelmany" 26 (length v)
+  where
+    delay sec = threadDelay (sec * 1000000)
 
 async_poll :: Assertion
 async_poll = do

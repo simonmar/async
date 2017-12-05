@@ -667,12 +667,15 @@ concurrently' left right collect = do
 
         count <- newIORef (2 :: Int)
         let takeDone = do
+                r <- takeMVar done      -- interruptible
                 -- Decrement the counter so we know how many takes are left.
                 -- Since only the parent thread is calling this, we can
                 -- use non-atomic modifications.
+                -- NB. do this *after* takeMVar, because takeMVar might be
+                -- interrupted.
                 modifyIORef count (subtract 1)
+                return r
 
-                takeMVar done
 
         let stop = do
                 -- kill right before left, to match the semantics of
@@ -682,7 +685,7 @@ concurrently' left right collect = do
                   -- ensure the children are really dead
                   count' <- readIORef count
                   replicateM_ count' (takeMVar done)
-        r <- restore (collect takeDone) `onException` stop
+        r <- collect takeDone `onException` stop
         stop
         return r
 
