@@ -1,4 +1,5 @@
-{-# LANGUAGE CPP, MagicHash, UnboxedTuples, RankNTypes #-}
+{-# LANGUAGE CPP, MagicHash, UnboxedTuples, RankNTypes,
+    ExistentialQuantification #-}
 #if __GLASGOW_HASKELL__ >= 701
 {-# LANGUAGE Trustworthy #-}
 #endif
@@ -113,7 +114,7 @@ module Control.Concurrent.Async (
     waitBothSTM,
 
     -- ** Linking
-    link, link2,
+    link, link2, ExceptionInLinkedThread(..),
 
     -- * Convenient utilities
     race, race_,
@@ -496,6 +497,20 @@ waitBothSTM left right = do
     return (a,b)
 
 
+-- -----------------------------------------------------------------------------
+-- Lining threads
+
+data ExceptionInLinkedThread =
+  forall a . ExceptionInLinkedThread (Async a) SomeException
+
+instance Show ExceptionInLinkedThread where
+  show (ExceptionInLinkedThread (Async t _) e) =
+    "ExceptionInLinkedThread " ++ show t ++ " " ++ show e
+
+instance Exception ExceptionInLinkedThread where
+  fromException = asyncExceptionFromException
+  toException = asyncExceptionToException
+
 -- | Link the given @Async@ to the current thread, such that if the
 -- @Async@ raises an exception, that exception will be re-thrown in
 -- the current thread.
@@ -504,10 +519,10 @@ link :: Async a -> IO ()
 link a = do
   me <- myThreadId
   void $ forkRepeat $ do
-     r <- waitCatch a
-     case r of
-       Left e -> throwTo me e
-       _ -> return ()
+    r <- waitCatch a
+    case r of
+      Left e -> throwTo me (ExceptionInLinkedThread a e)
+      _ -> return ()
 
 -- | Link two @Async@s together, such that if either raises an
 -- exception, the same exception is re-thrown in the other @Async@.
@@ -517,8 +532,8 @@ link2 left@(Async tl _)  right@(Async tr _) =
   void $ forkRepeat $ do
     r <- waitEitherCatch left right
     case r of
-      Left  (Left e) -> throwTo tr e
-      Right (Left e) -> throwTo tl e
+      Left  (Left e) -> throwTo tr (ExceptionInLinkedThread left e)
+      Right (Left e) -> throwTo tl (ExceptionInLinkedThread right e)
       _ -> return ()
 
 

@@ -43,6 +43,8 @@ tests = [
   , testCase "concurrently_" case_concurrently_
   , testCase "replicateConcurrently_" case_replicateConcurrently
   , testCase "replicateConcurrently" case_replicateConcurrently_
+  , testCase "link1" case_link1
+  , testCase "link2" case_link2
  ]
 
 value = 42 :: Int
@@ -236,3 +238,62 @@ case_replicateConcurrently_ = do
   () <- replicateConcurrently_ 100 action
   resVal <- readIORef ref
   resVal @?= 100
+
+case_link1 :: Assertion
+case_link1 = do
+  m1 <- newEmptyMVar
+  m2 <- newEmptyMVar
+  let ex = ErrorCall "oops"
+  a <- async $ do takeMVar m1; throwIO ex; putMVar m2 ()
+  link a
+  e <- try $ (do
+    putMVar m1 ()
+    takeMVar m2)
+  assertBool "link1" $
+    case e of
+      Left (ExceptionInLinkedThread a' e') ->
+        compareAsyncs a' a == EQ &&
+          case fromException e' of
+            Just (ErrorCall s) -> s == "oops"
+            _otherwise -> False
+      _other -> False
+
+case_link2 :: Assertion
+case_link2 = do
+  let
+    setup = do
+      m1 <- newEmptyMVar
+      m2 <- newEmptyMVar
+      let ex1 = ErrorCall "oops1"; ex2 = ErrorCall "oops2"
+      a <- async $ do takeMVar m1; throwIO ex1
+      b <- async $ do takeMVar m2; throwIO ex2
+      link2 a b
+      return (m1,m2,a,b)
+
+  (m1,m2,a,b) <- setup
+  e <- try $ do
+    putMVar m1 ()
+    wait b
+  putMVar m2 ()  -- ensure the other thread is not deadlocked
+  assertBool "link2a" $
+    case e of
+      Left (ExceptionInLinkedThread a' e') ->
+        compareAsyncs a' a == EQ &&
+          case fromException e' of
+            Just (ErrorCall s) -> s == "oops1"
+            _otherwise -> False
+      _other -> False
+
+  (m1,m2,a,b) <- setup
+  e <- try $ do
+    putMVar m2 ()
+    wait a
+  putMVar m1 ()  -- ensure the other thread is not deadlocked
+  assertBool "link2b" $
+    case e of
+      Left (ExceptionInLinkedThread a' e') ->
+        compareAsyncs a' b == EQ &&
+          case fromException e' of
+            Just (ErrorCall s) -> s == "oops2"
+            _otherwise -> False
+      _other -> False
