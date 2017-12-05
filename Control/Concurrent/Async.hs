@@ -707,7 +707,9 @@ concurrently' left right collect = do
                   -- child thread could be in an uninterruptible
                   -- putMVar.
                   when (count' > 0) $
-                    void $ forkIO $ killThread rid >> killThread lid
+                    void $ forkIO $ do
+                      throwTo rid AsyncCancelled
+                      throwTo lid AsyncCancelled
                   -- ensure the children are really dead
                   replicateM_ count' (tryAgain $ takeMVar done)
 
