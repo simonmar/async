@@ -1,3 +1,18 @@
+## Changes in 2.2:
+ - cancel now throws AsyncCancelled instead of ThreadKilled
+ - link and link2 now wrap exceptions in ExceptionInLinkedThread when
+   throwing to the linked thread. ExceptionInLinkedThread is a child
+   of AsyncException in the exception hierarchy, so this maintains the
+   invariant that exceptions thrown asynchronously should be
+   AsyncExceptions.
+ - link and link2 do not propagate AsyncCancelled, so it's now
+   possible to cancel a linked thread without cancelling yourself.
+ - Added linkOnly and link2Only to specify which exceptions should be
+   propagated,if you want something other than the default behaviour
+   of ignoring AsyncCancelled.
+ - new utility function compareAsyncs for comparing Asyncs of
+   different types.
+
 ## Changes in 2.1.1.1:
  - Make 'cancelWith' wait for the cancelled thread to terminate, like 'cancel'
  - Updates to dependency bounds for GHC 8.2
