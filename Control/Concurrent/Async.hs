@@ -406,7 +406,11 @@ waitAnyCancel asyncs =
 waitEitherCatch :: Async a -> Async b
                 -> IO (Either (Either SomeException a)
                               (Either SomeException b))
-waitEitherCatch left right = atomically (waitEitherCatchSTM left right)
+waitEitherCatch left right =
+  tryAgain $ atomically (waitEitherCatchSTM left right)
+  where
+    -- See: https://github.com/simonmar/async/issues/14
+    tryAgain f = f `catch` \BlockedIndefinitelyOnSTM -> f
 
 -- | A version of 'waitEitherCatch' that can be used inside an STM transaction.
 --
