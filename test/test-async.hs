@@ -6,6 +6,7 @@ import Test.Framework.Providers.HUnit
 
 import Test.HUnit
 
+import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Exception
 import Data.IORef
@@ -35,6 +36,7 @@ tests = [
   , testGroup "children surviving too long"
       [ testCase "concurrently+success" concurrently_success
       , testCase "concurrently+failure" concurrently_failure
+      , testCase "concurrently+killThread" concurrently_killThread
       , testCase "race+success" race_success
       , testCase "race+failure" race_failure
       , testCase "cancel" cancel_survive
@@ -159,6 +161,27 @@ concurrently_failure = do
   threadDelay 1000000 -- not using the baton, can lead to deadlock detection
   res <- readIORef finalRes
   res @?= "parent"
+
+-- Interrupt concurrently with killThread when it is waiting for a child.
+-- It is important that children block in `finally` for different amount of
+-- time.
+-- See #59
+concurrently_killThread :: Assertion
+concurrently_killThread = do
+  mvar <- newMVar (0 :: Int)
+
+  let child n = do
+        void (modifyMVar_ mvar (return . succ))
+        threadDelay (10 * 1000000)
+          `finally` ( do
+            threadDelay (n * 1000000)
+            void (modifyMVar_ mvar (return . pred)))
+
+  withAsync (concurrently_ (child 10) (child 0)) $ const $ do
+    threadDelay (1 * 1000000)
+
+  count <- readMVar mvar
+  count @?= 0
 
 race_success :: Assertion
 race_success = do
