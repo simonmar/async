@@ -225,6 +225,10 @@ asyncUsing doFork = \action -> do
 -- This is a useful variant of 'async' that ensures an @Async@ is
 -- never left running unintentionally.
 --
+-- Note: a reference to the child thread is kept alive until the call
+-- to `withAsync` returns, so nesting many `withAsync` calls requires
+-- linear memory.
+--
 withAsync :: IO a -> (Async a -> IO b) -> IO b
 withAsync = inline withAsyncUsing rawForkIO
 
@@ -634,58 +638,72 @@ concurrently left right =
 -- race :: IO a -> IO b -> IO (Either a b)
 race left right = concurrently' left right collect
   where
-    collect m = do
-        e <- m
-        case e of
-            Left ex -> throwIO ex
-            Right r -> return r
+    collect left right = atomically $
+      (Left  <$> wait' left)
+        `orElse`
+      (Right <$> wait' right)
 
 -- race_ :: IO a -> IO b -> IO ()
 race_ left right = void $ race left right
 
 -- concurrently :: IO a -> IO b -> IO (a,b)
-concurrently left right = concurrently' left right (collect [])
+concurrently left right = concurrently' left right collect
   where
-    collect [Left a, Right b] _ = return (a,b)
-    collect [Right b, Left a] _ = return (a,b)
-    collect xs m = do
-        e <- m
-        case e of
-            Left ex -> throwIO ex
-            Right r -> collect (r:xs) m
+    collect left right = atomically $ do
+      a <- wait' left
+             `orElse`
+           (wait' right >> retry)
+      b <- wait' right
+      return (a,b)
+
+data TResult a
+  = TNothing
+  | TEx SomeException
+  | TDone a
+
+wait' :: TVar (TResult a) -> STM a
+wait' t = do
+  m <- readTVar t
+  case m of
+    TNothing -> retry
+    TEx e -> throwSTM e
+    TDone a -> return a
 
 concurrently' :: IO a -> IO b
-             -> (IO (Either SomeException (Either a b)) -> IO r)
+             -> (TVar (TResult a) -> TVar (TResult b) -> IO r)
              -> IO r
 concurrently' left right collect = do
-    done <- newEmptyMVar
+    tleft <- newTVarIO TNothing
+    tright <- newTVarIO TNothing
     mask $ \restore -> do
-        lid <- forkIO $ restore (left >>= putMVar done . Right . Left)
-                             `catchAll` (putMVar done . Left)
-        rid <- forkIO $ restore (right >>= putMVar done . Right . Right)
-                             `catchAll` (putMVar done . Left)
+        lid <- forkIO $
+          restore (left >>= \r -> atomically (writeTVar tleft (TDone r)))
+            `catchAll` \e -> atomically (writeTVar tleft (TEx e))
+        rid <- forkIO $
+          restore (right >>= \r -> atomically (writeTVar tright (TDone r)))
+            `catchAll` \e -> atomically (writeTVar tright (TEx e))
 
-        count <- newIORef (2 :: Int)
-        let takeDone = do
-                r <- takeMVar done      -- interruptible
-                -- Decrement the counter so we know how many takes are left.
-                -- Since only the parent thread is calling this, we can
-                -- use non-atomic modifications.
-                -- NB. do this *after* takeMVar, because takeMVar might be
-                -- interrupted.
-                modifyIORef count (subtract 1)
-                return r
+        let
+            -- See: https://github.com/simonmar/async/issues/14
+            tryAgain f = f `catch` \BlockedIndefinitelyOnMVar -> f
 
-
-        let stop = do
+            stop = do
                 -- kill right before left, to match the semantics of
                 -- the version using withAsync. (#27)
                 uninterruptibleMask_ $ do
-                  killThread rid >> killThread lid
-                  -- ensure the children are really dead
-                  count' <- readIORef count
-                  replicateM_ count' (takeMVar done)
-        r <- collect takeDone `onException` stop
+                  join $ atomically $ do
+                    r <- readTVar tleft
+                    l <- case r of TNothing -> return (killThread lid); _ -> return (return ())
+                    r <- readTVar tright
+                    r <- case r of TNothing -> return (killThread rid); _ -> return (return ())
+                    return (r >> l)
+                  atomically $ do
+                    r <- readTVar tleft
+                    case r of TNothing -> retry; _ -> return ()
+                    r <- readTVar tright
+                    case r of TNothing -> retry; _ -> return ()
+
+        r <- collect tleft tright `onException` stop
         stop
         return r
 
@@ -725,14 +743,14 @@ forConcurrently_ = flip mapConcurrently_
 --
 -- @since 2.1.1
 concurrently_ :: IO a -> IO b -> IO ()
-concurrently_ left right = concurrently' left right (collect 0)
+concurrently_ left right = concurrently' left right collect
   where
-    collect 2 _ = return ()
-    collect i m = do
-        e <- m
-        case e of
-            Left ex -> throwIO ex
-            Right _ -> collect (i + 1 :: Int) m
+    collect left right = atomically $ do
+      wait' left
+             `orElse`
+           (wait' right >> retry)
+      wait' right
+      return ()
 
 -- | Perform the action in the given number of threads.
 --
