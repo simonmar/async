@@ -231,6 +231,10 @@ asyncUsing doFork = \action -> do
 -- This is a useful variant of 'async' that ensures an @Async@ is
 -- never left running unintentionally.
 --
+-- Note: a reference to the child thread is kept alive until the call
+-- to `withAsync` returns, so nesting many `withAsync` calls requires
+-- linear memory.
+--
 withAsync :: IO a -> (Async a -> IO b) -> IO b
 withAsync = inline withAsyncUsing rawForkIO
 
