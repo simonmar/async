@@ -3,6 +3,9 @@
 #if __GLASGOW_HASKELL__ >= 701
 {-# LANGUAGE Trustworthy #-}
 #endif
+#if __GLASGOW_HASKELL__ < 710
+{-# LANGUAGE DeriveDataTypeable #-}
+#endif
 {-# OPTIONS -Wall #-}
 
 -----------------------------------------------------------------------------
@@ -139,6 +142,9 @@ import Control.Applicative
 #if !MIN_VERSION_base(4,8,0)
 import Data.Monoid (Monoid(mempty,mappend))
 import Data.Traversable
+#endif
+#if __GLASGOW_HASKELL__ < 710
+import Data.Typeable
 #endif
 #if MIN_VERSION_base(4,9,0)
 import Data.Semigroup (Semigroup((<>)))
@@ -342,7 +348,11 @@ cancel a@(Async t _) = throwTo t AsyncCancelled <* waitCatch a
 
 -- | The exception thrown by `cancel` to terminate a thread.
 data AsyncCancelled = AsyncCancelled
-  deriving (Show, Eq)
+  deriving (Show, Eq,
+#if __GLASGOW_HASKELL__ < 710
+    Typeable
+#endif
+    )
 
 instance Exception AsyncCancelled where
   fromException = asyncExceptionFromException
@@ -512,6 +522,9 @@ waitBothSTM left right = do
 
 data ExceptionInLinkedThread =
   forall a . ExceptionInLinkedThread (Async a) SomeException
+#if __GLASGOW_HASKELL__ < 710
+  deriving Typeable
+#endif
 
 instance Show ExceptionInLinkedThread where
   show (ExceptionInLinkedThread (Async t _) e) =
