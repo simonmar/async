@@ -506,7 +506,7 @@ waitBothSTM left right = do
 
 
 -- -----------------------------------------------------------------------------
--- Lining threads
+-- Linking threads
 
 data ExceptionInLinkedThread =
   forall a . ExceptionInLinkedThread (Async a) SomeException
@@ -521,28 +521,61 @@ instance Exception ExceptionInLinkedThread where
 
 -- | Link the given @Async@ to the current thread, such that if the
 -- @Async@ raises an exception, that exception will be re-thrown in
--- the current thread.
+-- the current thread, wrapped in 'ExceptionInLinkedThread'.
+--
+-- 'link' ignores 'AsyncCancelled' exceptions thrown in the other thread,
+-- so that it's safe to 'cancel' a thread you're linked to.  If you want
+-- different behaviour, use 'linkOnly'.
 --
 link :: Async a -> IO ()
-link a = do
+link = linkOnly (not . isCancel)
+
+-- | Link the given @Async@ to the current thread, such that if the
+-- @Async@ raises an exception, that exception will be re-thrown in
+-- the current thread.  The supplied predicate determines which
+-- exceptions in the target thread should be propagated to the source
+-- thread.
+--
+linkOnly
+  :: (SomeException -> Bool)  -- ^ return 'True' if the exception
+                              -- should be propagated, 'False'
+                              -- otherwise.
+  -> Async a
+  -> IO ()
+linkOnly shouldThrow a = do
   me <- myThreadId
   void $ forkRepeat $ do
     r <- waitCatch a
     case r of
-      Left e -> throwTo me (ExceptionInLinkedThread a e)
-      _ -> return ()
+      Left e | shouldThrow e -> throwTo me (ExceptionInLinkedThread a e)
+      _otherwise -> return ()
 
 -- | Link two @Async@s together, such that if either raises an
--- exception, the same exception is re-thrown in the other @Async@.
+-- exception, the same exception is re-thrown in the other @Async@,
+-- wrapped in 'ExceptionInLinkedThread'.
+--
+-- 'link2' ignores 'AsyncCancelled' exceptions, so that it's possible
+-- to 'cancel' either thread without cancelling the other.  If you
+-- want different behaviour, use 'link2Only'.
 --
 link2 :: Async a -> Async b -> IO ()
-link2 left@(Async tl _)  right@(Async tr _) =
+link2 = link2Only (not . isCancel)
+
+link2Only :: (SomeException -> Bool) -> Async a -> Async b -> IO ()
+link2Only shouldThrow left@(Async tl _)  right@(Async tr _) =
   void $ forkRepeat $ do
     r <- waitEitherCatch left right
     case r of
-      Left  (Left e) -> throwTo tr (ExceptionInLinkedThread left e)
-      Right (Left e) -> throwTo tl (ExceptionInLinkedThread right e)
+      Left  (Left e) | shouldThrow e ->
+        throwTo tr (ExceptionInLinkedThread left e)
+      Right (Left e) | shouldThrow e ->
+        throwTo tl (ExceptionInLinkedThread right e)
       _ -> return ()
+
+isCancel :: SomeException -> Bool
+isCancel e
+  | Just AsyncCancelled <- fromException e = True
+  | otherwise = False
 
 
 -- -----------------------------------------------------------------------------

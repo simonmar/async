@@ -45,6 +45,7 @@ tests = [
   , testCase "replicateConcurrently" case_replicateConcurrently_
   , testCase "link1" case_link1
   , testCase "link2" case_link2
+  , testCase "link1_cancel" case_link1cancel
  ]
 
 value = 42 :: Int
@@ -296,4 +297,17 @@ case_link2 = do
           case fromException e' of
             Just (ErrorCall s) -> s == "oops2"
             _otherwise -> False
+      _other -> False
+
+case_link1cancel :: Assertion
+case_link1cancel = do
+  m1 <- newEmptyMVar
+  let ex = ErrorCall "oops"
+  a <- async $ do takeMVar m1
+  link a
+  e <- try $ do cancel a; wait a
+  putMVar m1 ()
+  assertBool "link1cancel" $
+    case e of
+      Left AsyncCancelled -> True  -- should not be ExceptionInLinkedThread
       _other -> False
