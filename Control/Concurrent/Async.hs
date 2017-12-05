@@ -359,8 +359,10 @@ data AsyncCancelled = AsyncCancelled
     )
 
 instance Exception AsyncCancelled where
+#if __GLASGOW_HASKELL__ >= 708
   fromException = asyncExceptionFromException
   toException = asyncExceptionToException
+#endif
 
 -- | Cancel an asynchronous action
 --
@@ -535,8 +537,10 @@ instance Show ExceptionInLinkedThread where
     "ExceptionInLinkedThread " ++ show t ++ " " ++ show e
 
 instance Exception ExceptionInLinkedThread where
+#if __GLASGOW_HASKELL__ >= 708
   fromException = asyncExceptionFromException
   toException = asyncExceptionToException
+#endif
 
 -- | Link the given @Async@ to the current thread, such that if the
 -- @Async@ raises an exception, that exception will be re-thrown in
