@@ -492,10 +492,10 @@ waitBothSTM left right = do
 -- the current thread.
 --
 link :: Async a -> IO ()
-link (Async _ w) = do
+link a = do
   me <- myThreadId
   void $ forkRepeat $ do
-     r <- atomically $ w
+     r <- waitCatch a
      case r of
        Left e -> throwTo me e
        _ -> return ()
