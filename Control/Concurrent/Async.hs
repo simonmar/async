@@ -352,9 +352,9 @@ cancel a@(Async t _) = throwTo t AsyncCancelled <* waitCatch a
 
 -- | The exception thrown by `cancel` to terminate a thread.
 data AsyncCancelled = AsyncCancelled
-  deriving (Show, Eq,
+  deriving (Show, Eq
 #if __GLASGOW_HASKELL__ < 710
-    Typeable
+    ,Typeable
 #endif
     )
 
