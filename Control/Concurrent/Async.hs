@@ -95,8 +95,8 @@ module Control.Concurrent.Async (
     withAsyncOnWithUnmask,
 
     -- ** Querying 'Async's
-    wait, poll, waitCatch, cancel, uninterruptibleCancel, cancelWith,
-    asyncThreadId,
+    wait, poll, waitCatch, asyncThreadId,
+    cancel, uninterruptibleCancel, cancelWith, AsyncCancelled(..),
 
     -- ** STM operations
     waitSTM, pollSTM, waitCatchSTM,
@@ -318,11 +318,11 @@ waitCatchSTM (Async _ w) = w
 pollSTM :: Async a -> STM (Maybe (Either SomeException a))
 pollSTM (Async _ w) = (Just <$> w) `orElse` return Nothing
 
--- | Cancel an asynchronous action by throwing the @ThreadKilled@
+-- | Cancel an asynchronous action by throwing the @AsyncCancelled@
 -- exception to it, and waiting for the `Async` thread to quit.
 -- Has no effect if the 'Async' has already completed.
 --
--- > cancel a = throwTo (asyncThreadId a) ThreadKilled <* waitCatch a
+-- > cancel a = throwTo (asyncThreadId a) AsyncCancelled <* waitCatch a
 --
 -- Note that 'cancel' will not terminate until the thread the 'Async'
 -- refers to has terminated. This means that 'cancel' will block for
@@ -336,7 +336,15 @@ pollSTM (Async _ w) = (Just <$> w) `orElse` return Nothing
 -- and the handler is blocking.
 {-# INLINE cancel #-}
 cancel :: Async a -> IO ()
-cancel a@(Async t _) = throwTo t ThreadKilled <* waitCatch a
+cancel a@(Async t _) = throwTo t AsyncCancelled <* waitCatch a
+
+-- | The exception thrown by `cancel` to terminate a thread.
+data AsyncCancelled = AsyncCancelled
+  deriving (Show, Eq)
+
+instance Exception AsyncCancelled where
+  fromException = asyncExceptionFromException
+  toException = asyncExceptionToException
 
 -- | Cancel an asynchronous action
 --
