@@ -218,7 +218,9 @@ asyncUsing doFork = \action -> do
 -- @Async@ handle to the supplied function.  When the function returns
 -- or throws an exception, 'uninterruptibleCancel' is called on the @Async@.
 --
--- > withAsync action inner = bracket (async action) uninterruptibleCancel inner
+-- > withAsync action inner = mask $ \restore -> do
+-- >   a <- async (restore action)
+-- >   restore inner `finally` uninterruptibleCancel a
 --
 -- This is a useful variant of 'async' that ensures an @Async@ is
 -- never left running unintentionally.
