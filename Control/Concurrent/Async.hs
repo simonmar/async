@@ -138,6 +138,7 @@ import qualified Data.Foldable as F
 import Prelude hiding (catch)
 #endif
 import Control.Monad
+import Control.Monad.Fix
 import Control.Applicative
 #if !MIN_VERSION_base(4,8,0)
 import Data.Monoid (Monoid(mempty,mappend))
@@ -814,6 +815,21 @@ instance Alternative Concurrently where
   empty = Concurrently $ forever (threadDelay maxBound)
   Concurrently as <|> Concurrently bs =
     Concurrently $ either id id <$> race as bs
+
+instance Monad Concurrently where
+    (Concurrently as) >>= asb = Concurrently $ do
+        aref <- newEmptyMVar
+        ((),b) <- concurrently (as >>= putMVar aref) (unsafeInterleaveIO (takeMVar aref) >>= runConcurrently . asb)
+        return b
+    
+    (>>) = (*>)
+
+instance MonadPlus Concurrently where
+    mzero = empty
+    mplus = (<|>)
+
+instance MonadFix Concurrently where
+    mfix f = Concurrently . mfix $ runConcurrently . f
 
 #if MIN_VERSION_base(4,9,0)
 -- | Only defined by @async@ for @base >= 4.9@
