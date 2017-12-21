@@ -12,6 +12,7 @@
    of ignoring AsyncCancelled.
  - new utility function compareAsyncs for comparing Asyncs of
    different types.
+ - Add a `Hashable` instance for `Async a`
 
 ## Changes in 2.1.1.1:
  - Make 'cancelWith' wait for the cancelled thread to terminate, like 'cancel'

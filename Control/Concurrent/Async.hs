@@ -149,6 +149,7 @@ import Data.Typeable
 #if MIN_VERSION_base(4,9,0)
 import Data.Semigroup (Semigroup((<>)))
 #endif
+import Data.Hashable (Hashable(hashWithSalt))
 
 import Data.IORef
 
@@ -177,6 +178,9 @@ instance Eq (Async a) where
 
 instance Ord (Async a) where
   Async a _ `compare` Async b _  =  a `compare` b
+
+instance Hashable (Async a) where
+  hashWithSalt salt (Async a _) = hashWithSalt salt a
 
 instance Functor Async where
   fmap f (Async a w) = Async a (fmap (fmap f) w)
