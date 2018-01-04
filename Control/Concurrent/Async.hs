@@ -744,7 +744,7 @@ mapConcurrently f = runConcurrently . traverse (Concurrently . f)
 -- > pages <- forConcurrently ["url1", "url2", "url3"] $ \url -> getURL url
 --
 -- @since 2.1.0
-forConcurrently :: Traversable t => t a -> (a -> IO b)-> IO (t b)
+forConcurrently :: Traversable t => t a -> (a -> IO b) -> IO (t b)
 forConcurrently = flip mapConcurrently
 
 -- | `mapConcurrently_` is `mapConcurrently` with the return value discarded,
