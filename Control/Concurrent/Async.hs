@@ -736,6 +736,9 @@ concurrently' left right collect = do
 -- the original data structure with the arguments replaced by the
 -- results.
 --
+-- If any of the actions throw an exception, then all other actions are
+-- cancelled and the exception is re-thrown.
+--
 -- For example, @mapConcurrently@ works with lists:
 --
 -- > pages <- mapConcurrently getURL ["url1", "url2", "url3"]
