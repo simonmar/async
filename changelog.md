@@ -1,3 +1,9 @@
+## Changes in 2.2.1:
+
+ - Add a Hashable instance for Async
+ - Bump upper bounds
+ - Documentation updates
+
 ## Changes in 2.2:
  - cancel now throws AsyncCancelled instead of ThreadKilled
  - link and link2 now wrap exceptions in ExceptionInLinkedThread when

@@ -1,5 +1,5 @@
 name:                async
-version:             2.2
+version:             2.2.1
 -- don't forget to update ./changelog.md!
 synopsis:            Run IO operations asynchronously and wait for their results
 
@@ -93,4 +93,5 @@ executable race
     main-is:    race.hs
     build-depends: base, async, stm
     ghc-options: -O2 -threaded
+
 
