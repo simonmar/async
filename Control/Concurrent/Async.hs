@@ -755,12 +755,12 @@ forConcurrently :: Traversable t => t a -> (a -> IO b) -> IO (t b)
 forConcurrently = flip mapConcurrently
 
 -- | `mapConcurrently_` is `mapConcurrently` with the return value discarded,
--- just like @mapM_
+-- just like @mapM_@.
 mapConcurrently_ :: F.Foldable f => (a -> IO b) -> f a -> IO ()
 mapConcurrently_ f = runConcurrently . F.foldMap (Concurrently . void . f)
 
 -- | `forConcurrently_` is `forConcurrently` with the return value discarded,
--- just like @forM_
+-- just like @forM_@.
 forConcurrently_ :: F.Foldable f => f a -> (a -> IO b) -> IO ()
 forConcurrently_ = flip mapConcurrently_
 
