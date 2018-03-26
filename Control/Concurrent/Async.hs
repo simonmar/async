@@ -117,7 +117,7 @@ module Control.Concurrent.Async (
     waitBothSTM,
 
     -- ** Linking
-    link, link2, ExceptionInLinkedThread(..),
+    link, linkOnly, link2, link2Only, ExceptionInLinkedThread(..),
 
     -- * Convenient utilities
     race, race_,
@@ -559,9 +559,10 @@ link = linkOnly (not . isCancel)
 
 -- | Link the given @Async@ to the current thread, such that if the
 -- @Async@ raises an exception, that exception will be re-thrown in
--- the current thread.  The supplied predicate determines which
--- exceptions in the target thread should be propagated to the source
--- thread.
+-- the current thread, wrapped in 'ExceptionInLinkedThread'.
+--
+-- The supplied predicate determines which exceptions in the target
+-- thread should be propagated to the source thread.
 --
 linkOnly
   :: (SomeException -> Bool)  -- ^ return 'True' if the exception
@@ -588,6 +589,13 @@ linkOnly shouldThrow a = do
 link2 :: Async a -> Async b -> IO ()
 link2 = link2Only (not . isCancel)
 
+-- | Link two @Async@s together, such that if either raises an
+-- exception, the same exception is re-thrown in the other @Async@,
+-- wrapped in 'ExceptionInLinkedThread'.
+--
+-- The supplied predicate determines which exceptions in the target
+-- thread should be propagated to the source thread.
+--
 link2Only :: (SomeException -> Bool) -> Async a -> Async b -> IO ()
 link2Only shouldThrow left@(Async tl _)  right@(Async tr _) =
   void $ forkRepeat $ do
