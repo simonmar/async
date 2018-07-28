@@ -230,7 +230,7 @@ asyncUsing doFork = \action -> do
 --
 -- > withAsync action inner = mask $ \restore -> do
 -- >   a <- async (restore action)
--- >   restore inner `finally` uninterruptibleCancel a
+-- >   restore (inner a) `finally` uninterruptibleCancel a
 --
 -- This is a useful variant of 'async' that ensures an @Async@ is
 -- never left running unintentionally.
