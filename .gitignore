@@ -1,3 +1,5 @@
 dist/
 *~
 .stack-work/
+*.hi
+*.o
