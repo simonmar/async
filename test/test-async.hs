@@ -34,6 +34,7 @@ tests = [
   , testCase "async_poll"        async_poll
   , testCase "async_poll2"       async_poll2
   , testCase "withasync_waitCatch_blocked" withasync_waitCatch_blocked
+  , testCase "withasync_wait_blocked" withasync_wait_blocked
   , testGroup "children surviving too long"
       [ testCase "concurrently+success" concurrently_success
       , testCase "concurrently+failure" concurrently_failure
@@ -140,6 +141,16 @@ async_poll2 = do
 withasync_waitCatch_blocked :: Assertion
 withasync_waitCatch_blocked = do
   r <- withAsync (newEmptyMVar >>= takeMVar) waitCatch
+  case r of
+    Left e ->
+        case fromException e of
+            Just BlockedIndefinitelyOnMVar -> return ()
+            Nothing -> assertFailure $ show e
+    Right () -> assertFailure ""
+
+withasync_wait_blocked :: Assertion
+withasync_wait_blocked = do
+  r <- try $ withAsync (newEmptyMVar >>= takeMVar) wait
   case r of
     Left e ->
         case fromException e of

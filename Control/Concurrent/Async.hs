@@ -289,7 +289,10 @@ withAsyncUsing doFork = \action inner -> do
 --
 {-# INLINE wait #-}
 wait :: Async a -> IO a
-wait = atomically . waitSTM
+wait = tryAgain . atomically . waitSTM
+  where
+    -- See: https://github.com/simonmar/async/issues/14
+    tryAgain f = f `catch` \BlockedIndefinitelyOnSTM -> f
 
 -- | Wait for an asynchronous action to complete, and return either
 -- @Left e@ if the action raised an exception @e@, or @Right a@ if it
