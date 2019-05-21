@@ -540,8 +540,12 @@ data ExceptionInLinkedThread =
 #endif
 
 instance Show ExceptionInLinkedThread where
-  show (ExceptionInLinkedThread (Async t _) e) =
-    "ExceptionInLinkedThread " ++ show t ++ " " ++ show e
+  showsPrec p (ExceptionInLinkedThread (Async t _) e) =
+    showParen (p >= 11) $
+      showString "ExceptionInLinkedThread " .
+      showsPrec 11 t .
+      showString " " .
+      showsPrec 11 e
 
 instance Exception ExceptionInLinkedThread where
 #if __GLASGOW_HASKELL__ >= 708
