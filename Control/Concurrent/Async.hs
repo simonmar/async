@@ -185,7 +185,7 @@ instance Hashable (Async a) where
 instance Functor Async where
   fmap f (Async a w) = Async a (fmap (fmap f) w)
 
--- | Compare two 'Async's that may have different types
+-- | Compare two Asyncs that may have different types by their ThreadId.
 compareAsyncs :: Async a -> Async b -> Ordering
 compareAsyncs (Async t1 _) (Async t2 _) = compare t1 t2
 
