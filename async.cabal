@@ -1,5 +1,5 @@
 name:                async
-version:             2.2.1
+version:             2.2.2
 -- don't forget to update ./changelog.md!
 synopsis:            Run IO operations asynchronously and wait for their results
 

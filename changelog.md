@@ -1,3 +1,10 @@
+## Changes in 2.2.2:
+
+ - Builds with GHC 8.6.x
+ - linkOnly and link2Only are now exported
+ - wait now has the same behaviour with BlockedIndefinitelyOnSTM as waitCatch
+ - Documentation fixes
+
 ## Changes in 2.2.1:
 
  - Add a Hashable instance for Async
