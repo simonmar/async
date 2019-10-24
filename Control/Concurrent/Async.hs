@@ -122,8 +122,9 @@ module Control.Concurrent.Async (
     -- * Convenient utilities
     race, race_,
     concurrently, concurrently_,
-    mapConcurrently, forConcurrently,
-    mapConcurrently_, forConcurrently_,
+    mapConcurrently, forConcurrently, allConcurrently,
+    mapConcurrently_, forConcurrently_, allConcurrently_,
+
     replicateConcurrently, replicateConcurrently_,
     Concurrently(..),
     compareAsyncs,
@@ -746,6 +747,19 @@ concurrently' left right collect = do
 
 #endif
 
+-- | Performs all of the @IO@ actions concurrently, returning the original
+-- data structure with the actions replaced by the results.
+--
+-- If any of the actions throw an exception, then all other actions are
+-- cancelled and the exception is re-thrown.
+--
+-- The type of this function is analogous to 'sequence', but it would be
+-- inappropriate to name this "sequence" since this function is concurrent,
+-- not sequential.
+--
+allConcurrently :: (Traversable t, Monoid a) => t (IO a) -> IO (t a)
+allConcurrently = runConcurrently . traverse Concurrently
+
 -- | maps an @IO@-performing function over any @Traversable@ data
 -- type, performing all the @IO@ actions concurrently, and returning
 -- the original data structure with the arguments replaced by the
@@ -768,6 +782,11 @@ mapConcurrently f = runConcurrently . traverse (Concurrently . f)
 -- @since 2.1.0
 forConcurrently :: Traversable t => t a -> (a -> IO b) -> IO (t b)
 forConcurrently = flip mapConcurrently
+
+-- | `allConcurrently_` is `allConcurrently` with the return value discarded,
+-- just like `sequence_`.
+allConcurrently_ :: Traversable t => t (IO a) -> IO ()
+allConcurrently_ = runConcurrently . F.foldMap (Concurrently . void)
 
 -- | `mapConcurrently_` is `mapConcurrently` with the return value discarded,
 -- just like @mapM_@.
