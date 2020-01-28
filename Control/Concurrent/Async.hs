@@ -35,6 +35,7 @@
 -- For example, to fetch two web pages at the same time, we could do
 -- this (assuming a suitable @getURL@ function):
 --
+-- >    -- Do NOT use this code in production, it has a flaw (better version below).
 -- >    do a1 <- async (getURL url1)
 -- >       a2 <- async (getURL url2)
 -- >       page1 <- wait a1
@@ -48,7 +49,13 @@
 -- provides some additional safety: it is harder to accidentally
 -- forget about exceptions thrown in child threads.
 --
--- A slight improvement over the previous example is this:
+-- However, this code still has a problem:
+--
+-- Consider the case when the first 'wait' throws an exception; then the
+-- second 'wait' will not happen, and the second 'async' may be left
+-- running in the background, possibly indefinitely.
+--
+-- The correct way to do it is this:
 --
 -- >       withAsync (getURL url1) $ \a1 -> do
 -- >       withAsync (getURL url2) $ \a2 -> do
@@ -58,10 +65,10 @@
 --
 -- 'withAsync' is like 'async', except that the 'Async' is
 -- automatically killed (using 'uninterruptibleCancel') if the
--- enclosing IO operation returns before it has completed.  Consider
--- the case when the first 'wait' throws an exception; then the second
+-- enclosing IO operation returns before it has completed.  Again, consider
+-- the case when the first 'wait' throws an exception; now the second
 -- 'Async' will be automatically killed rather than being left to run
--- in the background, possibly indefinitely.  This is the second way
+-- in the background.  This is the second way
 -- that the library provides additional safety: using 'withAsync'
 -- means we can avoid accidentally leaving threads running.
 -- Furthermore, 'withAsync' allows a tree of threads to be built, such
@@ -190,6 +197,11 @@ compareAsyncs :: Async a -> Async b -> Ordering
 compareAsyncs (Async t1 _) (Async t2 _) = compare t1 t2
 
 -- | Spawn an asynchronous action in a separate thread.
+--
+-- Like for 'forkIO', the action may be left running unintentinally
+-- (see module-level documentation for details).
+--
+-- __Use 'withAsync' style functions wherever you can instead!__
 async :: IO a -> IO (Async a)
 async = inline asyncUsing rawForkIO
 
