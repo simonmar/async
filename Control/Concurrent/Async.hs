@@ -82,6 +82,12 @@
 -- >       (page1, page2) <- concurrently (getURL url1) (getURL url2)
 -- >       ...
 --
+-- If you need to wait for /N/ results, or for only one of multiple
+-- results, or a combination of those, see the section __/Convenient utilities/__.
+--
+-- In general,
+-- __most practical production code should only use the functions from the /Convenient utilities/ section__.
+--
 -- The 'Functor' instance can be used to change the result of an
 -- 'Async'.  For example:
 --
