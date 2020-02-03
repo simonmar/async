@@ -148,10 +148,10 @@ module Control.Concurrent.Async (
 
     -- * Asynchronous actions
     Async,
-    -- ** Spawning (low-level API)
-    async, asyncBound, asyncOn, asyncWithUnmask, asyncOnWithUnmask,
 
-    -- ** Spawning (high-level API with automatic 'cancel'ation)
+    -- * High-level API
+
+    -- ** Spawning with automatic 'cancel'ation
     withAsync, withAsyncBound, withAsyncOn, withAsyncWithUnmask,
     withAsyncOnWithUnmask,
 
@@ -159,25 +159,7 @@ module Control.Concurrent.Async (
     wait, poll, waitCatch, asyncThreadId,
     cancel, uninterruptibleCancel, cancelWith, AsyncCancelled(..),
 
-    -- ** STM operations
-    waitSTM, pollSTM, waitCatchSTM,
-
-    -- ** Waiting for multiple 'Async's
-    waitAny, waitAnyCatch, waitAnyCancel, waitAnyCatchCancel,
-    waitEither, waitEitherCatch, waitEitherCancel, waitEitherCatchCancel,
-    waitEither_,
-    waitBoth,
-
-    -- ** Waiting for multiple 'Async's in STM
-    waitAnySTM, waitAnyCatchSTM,
-    waitEitherSTM, waitEitherCatchSTM,
-    waitEitherSTM_,
-    waitBothSTM,
-
-    -- ** Linking
-    link, linkOnly, link2, link2Only, ExceptionInLinkedThread(..),
-
-    -- * #high-level-utilities# High-level utilities
+    -- ** #high-level-utilities# High-level utilities
     race, race_,
     concurrently, concurrently_,
     mapConcurrently, forConcurrently,
@@ -185,6 +167,31 @@ module Control.Concurrent.Async (
     replicateConcurrently, replicateConcurrently_,
     Concurrently(..),
     compareAsyncs,
+
+    -- ** Specialised operations
+
+    -- *** STM operations
+    waitSTM, pollSTM, waitCatchSTM,
+
+    -- *** Waiting for multiple 'Async's
+    waitAny, waitAnyCatch, waitAnyCancel, waitAnyCatchCancel,
+    waitEither, waitEitherCatch, waitEitherCancel, waitEitherCatchCancel,
+    waitEither_,
+    waitBoth,
+
+    -- *** Waiting for multiple 'Async's in STM
+    waitAnySTM, waitAnyCatchSTM,
+    waitEitherSTM, waitEitherCatchSTM,
+    waitEitherSTM_,
+    waitBothSTM,
+
+    -- * Low-level API
+
+    -- ** Spawning (low-level API)
+    async, asyncBound, asyncOn, asyncWithUnmask, asyncOnWithUnmask,
+
+    -- ** Linking
+    link, linkOnly, link2, link2Only, ExceptionInLinkedThread(..),
 
   ) where
 
