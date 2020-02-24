@@ -24,78 +24,123 @@
 -- "Control.Concurrent".  The main additional functionality it
 -- provides is the ability to wait for the return value of a thread,
 -- but the interface also provides some additional safety and
--- robustness over using threads and @MVar@ directly.
+-- robustness over using 'forkIO' threads and @MVar@ directly.
+--
+-- == High-level API
+--
+-- @async@'s high-level API spawns /lexically scoped/ threads,
+-- ensuring the following key poperties that make it safer to use
+-- than using plain 'forkIO':
+--
+-- 1. No exception is swallowed (waiting for results propagates exceptions).
+-- 2. No thread is leaked (left running unintentionally).
+--
+-- (This is done using the 'Control.Exception.bracket' pattern to work in presence
+-- of synchornous and asynchronous exceptions.)
+--
+-- __Most practical/production code should only use the high-level API__.
 --
 -- The basic type is @'Async' a@, which represents an asynchronous
 -- @IO@ action that will return a value of type @a@, or die with an
--- exception.  An @Async@ corresponds to a thread, and its 'ThreadId'
--- can be obtained with 'asyncThreadId', although that should rarely
--- be necessary.
+-- exception.  An 'Async' is a wrapper around a low-level 'forkIO' thread.
+--
+-- The fundamental function to spawn threads with the high-level API is
+-- 'withAsync'.
 --
 -- For example, to fetch two web pages at the same time, we could do
 -- this (assuming a suitable @getURL@ function):
 --
--- >    -- Do NOT use this code in production, it has a flaw (better version below).
--- >    do a1 <- async (getURL url1)
--- >       a2 <- async (getURL url2)
--- >       page1 <- wait a1
--- >       page2 <- wait a2
--- >       ...
+-- > withAsync (getURL url1) $ \a1 -> do
+-- >   withAsync (getURL url2) $ \a2 -> do
+-- >     page1 <- wait a1
+-- >     page2 <- wait a2
+-- >     ...
 --
--- where 'async' starts the operation in a separate thread, and
--- 'wait' waits for and returns the result.  If the operation
--- throws an exception, then that exception is re-thrown by
--- 'wait'.  This is one of the ways in which this library
--- provides some additional safety: it is harder to accidentally
--- forget about exceptions thrown in child threads.
+-- where 'withAsync' starts the operation in a separate thread, and
+-- 'wait' waits for and returns the result.
 --
--- However, this code still has a problem:
+-- * If the operation throws an exception, then that exception is re-thrown
+--    by 'wait'. This ensures property (1): No exception is swallowed.
+-- * If an exception bubbles up through a 'withAsync', then the 'Async'
+--   it spawned its 'cancel'ed. This ensures property (2): No thread is leaked.
 --
+-- Often we do not care to work manually with 'Async' handles like
+-- @a1@ and @a2@. Instead, we want to express high-level objectives like
+-- performing two or more tasks concurrently, and waiting for one or all
+-- of them to finish.
+--
+-- For example, the pattern of performing two IO actions concurrently and
+-- waiting for both their results is packaged up in a combinator 'concurrently',
+-- so we can further shorten the above example to:
+--
+-- > (page1, page2) <- concurrently (getURL url1) (getURL url2)
+-- > ...
+--
+-- The section __/High-level utilities/__ covers the most
+-- common high-level objectives, including:
+--
+-- * Waiting for 2 results ('concurrently').
+-- * Waiting for many results ('mapConcurrently' / 'forConcurrently').
+-- * Waiting for the first of 2 results ('race').
+-- * Waiting for arbitrary nestings of "all of /N/" and "the first of /N/"
+--   results with the 'Concurrently' newtype and its 'Applicative' and
+--   'Alternative' instances.
+--
+-- Click here to scroll to that section:
+-- "Control.Concurrent.Async#high-level-utilities".
+--
+-- == Low-level API
+--
+-- Some use cases require parallelism that is not lexically scoped.
+--
+-- For those, the low-level function 'async' can be used as a direct
+-- equivalent of 'forkIO':
+--
+-- > -- Do NOT use this code in production, it has a flaw (explained below).
+-- > do
+-- >   a1 <- async (getURL url1)
+-- >   a2 <- async (getURL url2)
+-- >   page1 <- wait a1
+-- >   page2 <- wait a2
+-- >   ...
+--
+-- In contrast to 'withAsync', this code has a problem.
+--
+-- It still fulfills property (1) in that an exception arising from
+-- @getUrl@ will be re-thrown by 'wait', but it does not fulfill
+-- property (2).
 -- Consider the case when the first 'wait' throws an exception; then the
 -- second 'wait' will not happen, and the second 'async' may be left
 -- running in the background, possibly indefinitely.
 --
--- The correct way to do it is this:
---
--- >       withAsync (getURL url1) $ \a1 -> do
--- >       withAsync (getURL url2) $ \a2 -> do
--- >       page1 <- wait a1
--- >       page2 <- wait a2
--- >       ...
---
 -- 'withAsync' is like 'async', except that the 'Async' is
 -- automatically killed (using 'uninterruptibleCancel') if the
--- enclosing IO operation returns before it has completed.  Again, consider
--- the case when the first 'wait' throws an exception; now the second
--- 'Async' will be automatically killed rather than being left to run
--- in the background.  This is the second way
--- that the library provides additional safety: using 'withAsync'
--- means we can avoid accidentally leaving threads running.
+-- enclosing IO operation returns before it has completed.
 -- Furthermore, 'withAsync' allows a tree of threads to be built, such
 -- that children are automatically killed if their parents die for any
 -- reason.
 --
--- The pattern of performing two IO actions concurrently and waiting
--- for their results is packaged up in a combinator 'concurrently', so
--- we can further shorten the above example to:
+-- If you need to use the low-level API, ensure that you gurantee
+-- property (2) by other means, such as 'link'ing asyncs that need
+-- to die together, and protecting against asynchronous exceptions
+-- using 'Control.Exception.bracket', 'Control.Exception.mask',
+-- or other functions from "Control.Exception".
 --
--- >       (page1, page2) <- concurrently (getURL url1) (getURL url2)
--- >       ...
---
--- If you need to wait for /N/ results, or for only one of multiple
--- results, or a combination of those, see the section __/Convenient utilities/__.
---
--- In general,
--- __most practical production code should only use the functions from the /Convenient utilities/ section__.
+-- == Miscellaneous
 --
 -- The 'Functor' instance can be used to change the result of an
 -- 'Async'.  For example:
 --
--- > ghci> a <- async (return 3)
--- > ghci> wait a
--- > 3
--- > ghci> wait (fmap (+1) a)
+-- > ghci> withAsync (return 3) (\a -> wait (fmap (+1) a))
 -- > 4
+--
+-- === Resource exhaustion
+--
+-- As with all concurrent programming, keep in mind that while
+-- Haskell's cooperative ("green") multithreading carries low overhead,
+-- spawning too many of them at the same time may lead to resource exhaustion
+-- (of memory, file descriptors, or other limited resources), given that the
+-- actions running in the threads consume these resources.
 
 -----------------------------------------------------------------------------
 
@@ -103,8 +148,8 @@ module Control.Concurrent.Async (
 
     -- * Asynchronous actions
     Async,
-    -- ** Spawning
-    async, asyncBound, asyncOn, asyncWithUnmask, asyncOnWithUnmask,
+
+    -- * High-level API
 
     -- ** Spawning with automatic 'cancel'ation
     withAsync, withAsyncBound, withAsyncOn, withAsyncWithUnmask,
@@ -114,25 +159,7 @@ module Control.Concurrent.Async (
     wait, poll, waitCatch, asyncThreadId,
     cancel, uninterruptibleCancel, cancelWith, AsyncCancelled(..),
 
-    -- ** STM operations
-    waitSTM, pollSTM, waitCatchSTM,
-
-    -- ** Waiting for multiple 'Async's
-    waitAny, waitAnyCatch, waitAnyCancel, waitAnyCatchCancel,
-    waitEither, waitEitherCatch, waitEitherCancel, waitEitherCatchCancel,
-    waitEither_,
-    waitBoth,
-
-    -- ** Waiting for multiple 'Async's in STM
-    waitAnySTM, waitAnyCatchSTM,
-    waitEitherSTM, waitEitherCatchSTM,
-    waitEitherSTM_,
-    waitBothSTM,
-
-    -- ** Linking
-    link, linkOnly, link2, link2Only, ExceptionInLinkedThread(..),
-
-    -- * Convenient utilities
+    -- ** #high-level-utilities# High-level utilities
     race, race_,
     concurrently, concurrently_,
     mapConcurrently, forConcurrently,
@@ -140,6 +167,31 @@ module Control.Concurrent.Async (
     replicateConcurrently, replicateConcurrently_,
     Concurrently(..),
     compareAsyncs,
+
+    -- ** Specialised operations
+
+    -- *** STM operations
+    waitSTM, pollSTM, waitCatchSTM,
+
+    -- *** Waiting for multiple 'Async's
+    waitAny, waitAnyCatch, waitAnyCancel, waitAnyCatchCancel,
+    waitEither, waitEitherCatch, waitEitherCancel, waitEitherCatchCancel,
+    waitEither_,
+    waitBoth,
+
+    -- *** Waiting for multiple 'Async's in STM
+    waitAnySTM, waitAnyCatchSTM,
+    waitEitherSTM, waitEitherCatchSTM,
+    waitEitherSTM_,
+    waitBothSTM,
+
+    -- * Low-level API
+
+    -- ** Spawning (low-level API)
+    async, asyncBound, asyncOn, asyncWithUnmask, asyncOnWithUnmask,
+
+    -- ** Linking
+    link, linkOnly, link2, link2Only, ExceptionInLinkedThread(..),
 
   ) where
 
@@ -198,7 +250,7 @@ instance Hashable (Async a) where
 instance Functor Async where
   fmap f (Async a w) = Async a (fmap (fmap f) w)
 
--- | Compare two Asyncs that may have different types by their ThreadId.
+-- | Compare two Asyncs that may have different types by their 'ThreadId'.
 compareAsyncs :: Async a -> Async b -> Ordering
 compareAsyncs (Async t1 _) (Async t2 _) = compare t1 t2
 
@@ -764,7 +816,7 @@ concurrently' left right collect = do
 
 #endif
 
--- | maps an @IO@-performing function over any @Traversable@ data
+-- | Maps an 'IO'-performing function over any 'Traversable' data
 -- type, performing all the @IO@ actions concurrently, and returning
 -- the original data structure with the arguments replaced by the
 -- results.
@@ -776,6 +828,10 @@ concurrently' left right collect = do
 --
 -- > pages <- mapConcurrently getURL ["url1", "url2", "url3"]
 --
+-- Take into account that @async@ will try to immediately spawn a thread
+-- for each element of the @Traversable@, so running this on large
+-- inputs without care may lead to resource exhaustion (of memory,
+-- file descriptors, or other limited resources).
 mapConcurrently :: Traversable t => (a -> IO b) -> t a -> IO (t b)
 mapConcurrently f = runConcurrently . traverse (Concurrently . f)
 
@@ -787,13 +843,13 @@ mapConcurrently f = runConcurrently . traverse (Concurrently . f)
 forConcurrently :: Traversable t => t a -> (a -> IO b) -> IO (t b)
 forConcurrently = flip mapConcurrently
 
--- | `mapConcurrently_` is `mapConcurrently` with the return value discarded,
--- just like @mapM_@.
+-- | `mapConcurrently_` is `mapConcurrently` with the return value discarded;
+-- a concurrent equivalent of 'mapM_'.
 mapConcurrently_ :: F.Foldable f => (a -> IO b) -> f a -> IO ()
 mapConcurrently_ f = runConcurrently . F.foldMap (Concurrently . void . f)
 
--- | `forConcurrently_` is `forConcurrently` with the return value discarded,
--- just like @forM_@.
+-- | `forConcurrently_` is `forConcurrently` with the return value discarded;
+-- a concurrent equivalent of 'forM_'.
 forConcurrently_ :: F.Foldable f => f a -> (a -> IO b) -> IO ()
 forConcurrently_ = flip mapConcurrently_
 
