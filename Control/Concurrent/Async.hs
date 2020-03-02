@@ -586,7 +586,10 @@ waitEitherCancel left right =
 --
 {-# INLINE waitBoth #-}
 waitBoth :: Async a -> Async b -> IO (a,b)
-waitBoth left right = atomically (waitBothSTM left right)
+waitBoth left right = tryAgain $ atomically (waitBothSTM left right)
+  where
+    -- See: https://github.com/simonmar/async/issues/14
+    tryAgain f = f `catch` \BlockedIndefinitelyOnSTM -> f
 
 -- | A version of 'waitBoth' that can be used inside an STM transaction.
 --
