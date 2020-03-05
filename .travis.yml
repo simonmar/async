@@ -35,9 +35,6 @@ matrix:
   include:
   # We grab the appropriate GHC and cabal-install versions from hvr's PPA. See:
   # https://github.com/hvr/multi-ghc-travis
-  - env: BUILD=cabal GHCVER=7.0.4 CABALVER=1.16 HAPPYVER=1.19.5 ALEXVER=3.1.7
-    compiler: ": #GHC 7.0.4"
-    addons: {apt: {packages: [cabal-install-1.16,ghc-7.0.4,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
   - env: BUILD=cabal GHCVER=7.2.2 CABALVER=1.16 HAPPYVER=1.19.5 ALEXVER=3.1.7
     compiler: ": #GHC 7.2.2"
     addons: {apt: {packages: [cabal-install-1.16,ghc-7.2.2,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
@@ -76,10 +73,6 @@ matrix:
   # variable, such as using --stack-yaml to point to a different file.
   - env: BUILD=stack ARGS=""
     compiler: ": #stack default"
-    addons: {apt: {packages: [libgmp-dev]}}
-
-  - env: BUILD=stack ARGS="--resolver lts-2"
-    compiler: ": #stack 7.8.4"
     addons: {apt: {packages: [libgmp-dev]}}
 
   - env: BUILD=stack ARGS="--resolver lts-3"
