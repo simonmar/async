@@ -60,9 +60,9 @@
 -- 'wait' waits for and returns the result.
 --
 -- * If the operation throws an exception, then that exception is re-thrown
---    by 'wait'. This ensures property (1): No exception is swallowed.
+--   by 'wait'. This ensures property (1): No exception is swallowed.
 -- * If an exception bubbles up through a 'withAsync', then the 'Async'
---   it spawned its 'cancel'ed. This ensures property (2): No thread is leaked.
+--   it spawned is 'cancel'ed. This ensures property (2): No thread is leaked.
 --
 -- Often we do not care to work manually with 'Async' handles like
 -- @a1@ and @a2@. Instead, we want to express high-level objectives like
