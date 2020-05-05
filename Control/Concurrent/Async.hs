@@ -720,6 +720,11 @@ race_ :: IO a -> IO b -> IO ()
 -- >   waitBoth a b
 concurrently :: IO a -> IO b -> IO (a,b)
 
+-- | 'concurrently', but ignore the result values
+--
+-- @since 2.1.1
+concurrently_ :: IO a -> IO b -> IO ()
+
 #define USE_ASYNC_VERSIONS 0
 
 #if USE_ASYNC_VERSIONS
@@ -729,15 +734,14 @@ race left right =
   withAsync right $ \b ->
   waitEither a b
 
-race_ left right =
-  withAsync left $ \a ->
-  withAsync right $ \b ->
-  waitEither_ a b
+race_ left right = void $ race left right
 
 concurrently left right =
   withAsync left $ \a ->
   withAsync right $ \b ->
   waitBoth a b
+
+concurrently_ left right = void $ concurrently left right
 
 #else
 
@@ -817,6 +821,16 @@ concurrently' left right collect = do
         stop
         return r
 
+concurrently_ left right = concurrently' left right (collect 0)
+  where
+    collect 2 _ = return ()
+    collect i m = do
+        e <- m
+        case e of
+            Left ex -> throwIO ex
+            Right _ -> collect (i + 1 :: Int) m
+
+
 #endif
 
 -- | Maps an 'IO'-performing function over any 'Traversable' data
@@ -855,19 +869,6 @@ mapConcurrently_ f = runConcurrently . F.foldMap (Concurrently . void . f)
 -- a concurrent equivalent of 'forM_'.
 forConcurrently_ :: F.Foldable f => f a -> (a -> IO b) -> IO ()
 forConcurrently_ = flip mapConcurrently_
-
--- | 'concurrently', but ignore the result values
---
--- @since 2.1.1
-concurrently_ :: IO a -> IO b -> IO ()
-concurrently_ left right = concurrently' left right (collect 0)
-  where
-    collect 2 _ = return ()
-    collect i m = do
-        e <- m
-        case e of
-            Left ex -> throwIO ex
-            Right _ -> collect (i + 1 :: Int) m
 
 -- | Perform the action in the given number of threads.
 --
