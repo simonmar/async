@@ -1,3 +1,7 @@
+## Changes in 2.2.3:
+
+ - Documentation fixes
+
 ## Changes in 2.2.2:
 
  - Builds with GHC 8.6.x
