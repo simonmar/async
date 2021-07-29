@@ -958,10 +958,10 @@ tryAll = try
 -- exception handler.
 {-# INLINE rawForkIO #-}
 rawForkIO :: IO () -> IO ThreadId
-rawForkIO action = IO $ \ s ->
+rawForkIO (IO action) = IO $ \ s ->
    case (fork# action s) of (# s1, tid #) -> (# s1, ThreadId tid #)
 
 {-# INLINE rawForkOn #-}
 rawForkOn :: Int -> IO () -> IO ThreadId
-rawForkOn (I# cpu) action = IO $ \ s ->
+rawForkOn (I# cpu) (IO action) = IO $ \ s ->
    case (forkOn# cpu action s) of (# s1, tid #) -> (# s1, ThreadId tid #)
