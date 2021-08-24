@@ -13,6 +13,7 @@ import Data.IORef
 import Data.Typeable
 import Control.Concurrent
 import Control.Monad
+import Control.Applicative
 import Data.List (sort)
 import Data.Maybe
 
@@ -38,6 +39,8 @@ tests = [
   , testGroup "children surviving too long"
       [ testCase "concurrently+success" concurrently_success
       , testCase "concurrently+failure" concurrently_failure
+      , testCase "concurrentlyE+success" concurrentlyE_success
+      , testCase "concurrentlyE+failure" concurrentlyE_failure
       , testCase "race+success" race_success
       , testCase "race+failure" race_failure
       , testCase "cancel" cancel_survive
@@ -50,6 +53,14 @@ tests = [
   , testCase "link2" case_link2
   , testCase "link1_cancel" case_link1cancel
   , testCase "concurrently_deadlock" case_concurrently_deadlock
+  , testCase "concurrentlyE_deadlock" case_concurrentlyE_deadlock
+  , testGroup "concurrentlyE" [
+        testCase "concurrentlyE_right" concurrentlyE_right
+      , testCase "concurrentlyE_left1" concurrentlyE_left1
+      , testCase "concurrentlyE_left2" concurrentlyE_left2
+      , testCase "concurrentlyE_earlyException" concurrentlyE_earlyException
+      , testCase "concurrentlyE_lateException" concurrentlyE_lateException
+  ]
  ]
 
 value = 42 :: Int
@@ -173,6 +184,21 @@ concurrently_success = do
   res <- readIORef finalRes
   res @?= "parent"
 
+concurrentlyE_success :: Assertion
+concurrentlyE_success = do
+  finalRes <- newIORef "never filled"
+  baton <- newEmptyMVar
+  let quick = return (Right ())
+      slow = threadDelay 10000 *> return (Right ()) `finally` do
+        threadDelay 10000
+        writeIORef finalRes "slow"
+        putMVar baton ()
+  _ <- concurrentlyE quick slow
+  writeIORef finalRes "parent"
+  takeMVar baton
+  res <- readIORef finalRes
+  res @?= "parent"
+
 concurrently_failure :: Assertion
 concurrently_failure = do
   finalRes <- newIORef "never filled"
@@ -181,6 +207,19 @@ concurrently_failure = do
         threadDelay 10000
         writeIORef finalRes "slow"
   _ :: Either SomeException ((), ()) <- try (concurrently quick slow)
+  writeIORef finalRes "parent"
+  threadDelay 1000000 -- not using the baton, can lead to deadlock detection
+  res <- readIORef finalRes
+  res @?= "parent"
+
+concurrentlyE_failure :: Assertion
+concurrentlyE_failure = do
+  finalRes <- newIORef "never filled"
+  let quick = error "a quick death"
+      slow = threadDelay 10000 *> return (Right ()) `finally` do
+        threadDelay 10000
+        writeIORef finalRes "slow"
+  _ :: Either SomeException (Either () ((), ())) <- try (concurrentlyE quick slow)
   writeIORef finalRes "parent"
   threadDelay 1000000 -- not using the baton, can lead to deadlock detection
   res <- readIORef finalRes
@@ -348,3 +387,49 @@ case_concurrently_deadlock = do
     case e of
       Left BlockedIndefinitelyOnSTM{} -> True
       _other -> False
+
+-- See Issue #62
+case_concurrentlyE_deadlock :: Assertion
+case_concurrentlyE_deadlock = do
+  tvar <- newTVarIO False :: IO (TVar Bool)
+  e <- try $ void $ join (concurrentlyE) (fmap Right $ atomically $ readTVar tvar >>= check)
+    -- should throw BlockedIndefinitelyOnSTM not BlockedIndefinitelyOnMVar
+  assertBool "concurrentlyE_deadlock" $
+    case e of
+      Left BlockedIndefinitelyOnSTM{} -> True
+      _other -> False
+
+concurrentlyE_right :: Assertion
+concurrentlyE_right = do
+    r :: Either () (Bool,Bool) <- concurrentlyE (Right . const False <$> threadDelay 10000) (Right . const True <$> threadDelay 10000)
+    assertEqual "should be Right" (Right (False,True)) r
+
+concurrentlyE_left1 :: Assertion
+concurrentlyE_left1 = do
+    r :: Either () ((),()) <- concurrentlyE (Left <$> threadDelay 10000) (Right <$> runConcurrently empty)
+    assertEqual "should be Left" (Left ()) r
+
+concurrentlyE_left2 :: Assertion
+concurrentlyE_left2 = do
+    r :: Either () ((),()) <- concurrentlyE (Right <$> runConcurrently empty) (Left <$> threadDelay 10000) 
+    assertEqual "should be Left" (Left ()) r
+
+concurrentlyE_earlyException :: Assertion
+concurrentlyE_earlyException = do
+    ref <- newIORef "never filled"
+    r :: Either TestException (Either () (Bool,Bool)) <- try $ 
+        concurrentlyE 
+            ((Right . const False <$> threadDelay 10000) `onException` writeIORef ref "finalized")
+            (threadDelay 1000 *> throwIO TestException)
+    refVal <- readIORef ref
+    assertEqual "should be Exception" (Left TestException, "finalized") (r, refVal)
+
+concurrentlyE_lateException :: Assertion
+concurrentlyE_lateException = do
+    ref <- newIORef "never filled"
+    r :: Either TestException (Either () (Bool,Bool)) <- try $ 
+        concurrentlyE 
+            ((Right . const False <$> threadDelay 1000) `onException` writeIORef ref "finalized")
+            (threadDelay 10000 *> throwIO TestException)
+    refVal <- readIORef ref
+    assertEqual "should be Exception" (Left TestException, "never filled") (r, refVal)

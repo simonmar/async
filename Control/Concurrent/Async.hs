@@ -166,6 +166,8 @@ module Control.Concurrent.Async (
     mapConcurrently_, forConcurrently_,
     replicateConcurrently, replicateConcurrently_,
     Concurrently(..),
+    concurrentlyE,
+    ConcurrentlyE(..),
     compareAsyncs,
 
     -- ** Specialised operations
@@ -210,6 +212,9 @@ import Data.Traversable
 #endif
 #if __GLASGOW_HASKELL__ < 710
 import Data.Typeable
+#endif
+#if MIN_VERSION_base(4,8,0)
+import Data.Bifunctor
 #endif
 #if MIN_VERSION_base(4,9,0)
 import Data.Semigroup (Semigroup((<>)))
@@ -720,6 +725,13 @@ race_ :: IO a -> IO b -> IO ()
 -- >   waitBoth a b
 concurrently :: IO a -> IO b -> IO (a,b)
 
+
+-- | Run two @IO@ actions concurrently. If both of them end with @Right@,
+-- return both results.  If one of then ends with @Left@, interrupt the other
+-- action and return the @Left@. 
+--
+concurrentlyE :: IO (Either e a) -> IO (Either e b) -> IO (Either e (a, b))
+
 -- | 'concurrently', but ignore the result values
 --
 -- @since 2.1.1
@@ -765,6 +777,19 @@ concurrently left right = concurrently' left right (collect [])
   where
     collect [Left a, Right b] _ = return (a,b)
     collect [Right b, Left a] _ = return (a,b)
+    collect xs m = do
+        e <- m
+        case e of
+            Left ex -> throwIO ex
+            Right r -> collect (r:xs) m
+
+-- concurrentlyE :: IO (Either e a) -> IO (Either e b) -> IO (Either e (a, b))
+concurrentlyE left right = concurrently' left right (collect [])
+  where
+    collect [Left (Right a), Right (Right b)] _ = return $ Right (a,b)
+    collect [Right (Right b), Left (Right a)] _ = return $ Right (a,b)
+    collect (Left (Left ea):_) _ = return $ Left ea
+    collect (Right (Left eb):_) _ = return $ Left eb
     collect xs m = do
         e <- m
         case e of
@@ -914,6 +939,29 @@ instance Alternative Concurrently where
   empty = Concurrently $ forever (threadDelay maxBound)
   Concurrently as <|> Concurrently bs =
     Concurrently $ either id id <$> race as bs
+
+-- | A value of type @ConcurrentlyE e a@ is an @IO@ operation that can be
+-- composed with other @ConcurrentlyE@ values, using the @Applicative@ instance.
+--
+-- Calling @runConcurrentlyE@ on a value of type @ConcurrentlyE e a@ will
+-- execute the @IO@ operations it contains concurrently, before delivering
+-- either the result of type @a@, or an error of type @e@ if one of the actions
+-- returns @Left@.
+newtype ConcurrentlyE e a = ConcurrentlyE { runConcurrentlyE :: IO (Either e a) }
+
+instance Functor (ConcurrentlyE e) where
+  fmap f (ConcurrentlyE ea) = ConcurrentlyE $ fmap (fmap f) ea
+
+#if MIN_VERSION_base(4,8,0)
+instance Bifunctor ConcurrentlyE where
+  bimap f g (ConcurrentlyE ea) = ConcurrentlyE $ fmap (bimap f g) ea
+#endif
+
+instance Applicative (ConcurrentlyE e) where
+  pure = ConcurrentlyE . return . return
+  ConcurrentlyE fs <*> ConcurrentlyE eas =
+    ConcurrentlyE $ fmap (\(f, a) -> f a) <$> concurrentlyE fs eas
+
 
 #if MIN_VERSION_base(4,9,0)
 -- | Only defined by @async@ for @base >= 4.9@
