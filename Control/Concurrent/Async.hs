@@ -97,21 +97,35 @@
 -- equivalent of 'forkIO':
 --
 -- > -- Do NOT use this code in production, it has a flaw (explained below).
--- > do
--- >   a1 <- async (getURL url1)
--- >   a2 <- async (getURL url2)
--- >   page1 <- wait a1
--- >   page2 <- wait a2
--- >   ...
+-- > data MyException = MyException
+-- >   deriving (Show)
+-- >
+-- > instance Exception MyException
+-- >
+-- > main = do
+-- >   a <- async $ do
+-- >     -- we should run THIS "do" block from a child thread,
+-- >     -- because if you will run from main thread you will not (obviously) see the "You should not see this message..."
+-- >     a1 <- async (throwIO MyException)
+-- >     a2 <- async $ do
+-- >       threadDelay (1 * one_second)
+-- >       putStrLn "You should not see this message, but you will, because thread a2 is not terminated"
+-- >       putStrLn "If a2 is left running indefinitely, then it may cause memory leak"
+-- >     wait a1 -- will throw MyException
+-- >     putStrLn "Never reached"
+-- >     wait a2
+-- >
+-- >   putStrLn "hello from main thread"
+-- >   threadDelay (2 * one_second)
+-- >   wait a -- will throw MyException
+-- >   where
+-- >     one_second = 10^6
 --
 -- In contrast to 'withAsync', this code has a problem.
 --
--- It still fulfills property (1) in that an exception arising from
--- @getUrl@ will be re-thrown by 'wait', but it does not fulfill
+-- It still fulfills property (1) in that an exception arising from within
+-- @a1@ will be re-thrown by 'wait', but it does not fulfill
 -- property (2).
--- Consider the case when the first 'wait' throws an exception; then the
--- second 'wait' will not happen, and the second 'async' may be left
--- running in the background, possibly indefinitely.
 --
 -- 'withAsync' is like 'async', except that the 'Async' is
 -- automatically killed (using 'uninterruptibleCancel') if the
