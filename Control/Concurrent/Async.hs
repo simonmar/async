@@ -117,7 +117,7 @@
 -- >
 -- >   putStrLn "hello from main thread"
 -- >   threadDelay (2 * one_second)
--- >   wait a -- will throw MyException
+-- >   wait a -- will throw MyException, program will terminate
 -- >   where
 -- >     one_second = 10^6
 --
