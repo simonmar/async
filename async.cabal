@@ -35,6 +35,7 @@ cabal-version:       >=1.10
 homepage:            https://github.com/simonmar/async
 bug-reports:         https://github.com/simonmar/async/issues
 tested-with:
+    GHC == 9.2.0.20210821
     GHC == 9.0.1
     GHC == 8.10.4
     GHC == 8.8.4
@@ -63,7 +64,7 @@ library
     if impl(ghc>=7.1)
         other-extensions: Trustworthy
     exposed-modules:     Control.Concurrent.Async
-    build-depends:       base     >= 4.3     && < 4.16,
+    build-depends:       base     >= 4.3     && < 4.17,
                          hashable >= 1.1.2.0 && < 1.4,
                          stm      >= 2.2     && < 2.6
 
@@ -72,7 +73,7 @@ test-suite test-async
     type:       exitcode-stdio-1.0
     hs-source-dirs: test
     main-is:    test-async.hs
-    build-depends: base >= 4.3 && < 4.15,
+    build-depends: base >= 4.3 && < 4.17,
                    async,
                    stm,
                    test-framework,
@@ -108,5 +109,3 @@ executable race
     main-is:    race.hs
     build-depends: base, async, stm
     ghc-options: -O2 -threaded
-
-
