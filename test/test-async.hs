@@ -406,12 +406,12 @@ concurrentlyE_right = do
 
 concurrentlyE_left1 :: Assertion
 concurrentlyE_left1 = do
-    r :: Either () ((),()) <- concurrentlyE (Left <$> threadDelay 10000) (Right <$> runConcurrently empty)
+    r :: Either () ((),()) <- concurrentlyE (Left <$> threadDelay 10000) (Right <$> forever (threadDelay 10000))
     assertEqual "should be Left" (Left ()) r
 
 concurrentlyE_left2 :: Assertion
 concurrentlyE_left2 = do
-    r :: Either () ((),()) <- concurrentlyE (Right <$> runConcurrently empty) (Left <$> threadDelay 10000) 
+    r :: Either () ((),()) <- concurrentlyE (Right <$> forever (threadDelay 10000)) (Left <$> threadDelay 10000) 
     assertEqual "should be Left" (Left ()) r
 
 concurrentlyE_earlyException :: Assertion
@@ -419,7 +419,7 @@ concurrentlyE_earlyException = do
     ref <- newIORef "never filled"
     r :: Either TestException (Either () (Bool,Bool)) <- try $ 
         concurrentlyE 
-            ((Right . const False <$> threadDelay 10000) `onException` writeIORef ref "finalized")
+            ((Right . const False <$> forever (threadDelay 10000)) `onException` writeIORef ref "finalized")
             (threadDelay 1000 *> throwIO TestException)
     refVal <- readIORef ref
     assertEqual "should be Exception" (Left TestException, "finalized") (r, refVal)
@@ -429,7 +429,7 @@ concurrentlyE_lateException = do
     ref <- newIORef "never filled"
     r :: Either TestException (Either () (Bool,Bool)) <- try $ 
         concurrentlyE 
-            ((Right . const False <$> threadDelay 1000) `onException` writeIORef ref "finalized")
-            (threadDelay 10000 *> throwIO TestException)
+            ((Right . const False <$> threadDelay 100) `onException` writeIORef ref "finalized")
+            (threadDelay 100000 *> throwIO TestException)
     refVal <- readIORef ref
     assertEqual "should be Exception" (Left TestException, "never filled") (r, refVal)
