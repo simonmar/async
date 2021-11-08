@@ -935,6 +935,7 @@ instance Applicative Concurrently where
   Concurrently fs <*> Concurrently as =
     Concurrently $ (\(f, a) -> f a) <$> concurrently fs as
 
+-- | 'Control.Alternative.empty' waits forever. 'Control.Alternative.<|>' returns the first to finish and 'cancel's the other.
 instance Alternative Concurrently where
   empty = Concurrently $ forever (threadDelay maxBound)
   Concurrently as <|> Concurrently bs =
