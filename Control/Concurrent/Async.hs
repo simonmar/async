@@ -330,16 +330,14 @@ withAsyncOn = withAsyncUsing . rawForkOn
 -- asynchronous exceptions.
 withAsyncWithUnmask
   :: ((forall c. IO c -> IO c) -> IO a) -> (Async a -> IO b) -> IO b
-withAsyncWithUnmask actionWith =
-  withAsyncUsing rawForkIO (actionWith unsafeUnmask)
+withAsyncWithUnmask = withAsyncWithUnmaskUsing rawForkIO
 
 -- | Like 'withAsyncOn' but uses 'forkOnWithUnmask' internally.  The
 -- child thread is passed a function that can be used to unmask
 -- asynchronous exceptions
 withAsyncOnWithUnmask
   :: Int -> ((forall c. IO c -> IO c) -> IO a) -> (Async a -> IO b) -> IO b
-withAsyncOnWithUnmask cpu actionWith =
-  withAsyncUsing (rawForkOn cpu) (actionWith unsafeUnmask)
+withAsyncOnWithUnmask cpus = withAsyncWithUnmaskUsing (rawForkOn cpus)
 
 withAsyncUsing :: (IO () -> IO ThreadId)
                -> IO a -> (Async a -> IO b) -> IO b
@@ -349,6 +347,22 @@ withAsyncUsing doFork = \action inner -> do
   var <- newEmptyTMVarIO
   mask $ \restore -> do
     t <- doFork $ try (restore action) >>= atomically . putTMVar var
+    let a = Async t (readTMVar var)
+    r <- restore (inner a) `catchAll` \e -> do
+      uninterruptibleCancel a
+      throwIO e
+    uninterruptibleCancel a
+    return r
+
+withAsyncWithUnmaskUsing
+    :: (IO () -> IO ThreadId)
+    -> ((forall c. IO c -> IO c) -> IO a) -> (Async a -> IO b) -> IO b
+-- The bracket version works, but is slow.  We can do better by
+-- hand-coding it:
+withAsyncWithUnmaskUsing doFork = \action inner -> do
+  var <- newEmptyTMVarIO
+  mask $ \restore -> do
+    t <- doFork $ try (action unsafeUnmask) >>= atomically . putTMVar var
     let a = Async t (readTMVar var)
     r <- restore (inner a) `catchAll` \e -> do
       uninterruptibleCancel a
@@ -728,7 +742,7 @@ concurrently :: IO a -> IO b -> IO (a,b)
 
 -- | Run two @IO@ actions concurrently. If both of them end with @Right@,
 -- return both results.  If one of then ends with @Left@, interrupt the other
--- action and return the @Left@. 
+-- action and return the @Left@.
 --
 concurrentlyE :: IO (Either e a) -> IO (Either e b) -> IO (Either e (a, b))
 
