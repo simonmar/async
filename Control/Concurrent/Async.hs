@@ -36,7 +36,7 @@
 -- 2. No thread is leaked (left running unintentionally).
 --
 -- (This is done using the 'Control.Exception.bracket' pattern to work in presence
--- of synchornous and asynchronous exceptions.)
+-- of synchronous and asynchronous exceptions.)
 --
 -- __Most practical/production code should only use the high-level API__.
 --
@@ -120,7 +120,7 @@
 -- that children are automatically killed if their parents die for any
 -- reason.
 --
--- If you need to use the low-level API, ensure that you gurantee
+-- If you need to use the low-level API, ensure that you guarantee
 -- property (2) by other means, such as 'link'ing asyncs that need
 -- to die together, and protecting against asynchronous exceptions
 -- using 'Control.Exception.bracket', 'Control.Exception.mask',
@@ -261,7 +261,7 @@ compareAsyncs (Async t1 _) (Async t2 _) = compare t1 t2
 
 -- | Spawn an asynchronous action in a separate thread.
 --
--- Like for 'forkIO', the action may be left running unintentinally
+-- Like for 'forkIO', the action may be left running unintentionally
 -- (see module-level documentation for details).
 --
 -- __Use 'withAsync' style functions wherever you can instead!__
