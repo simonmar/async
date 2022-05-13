@@ -479,7 +479,9 @@ waitAnyCatch = atomically . waitAnyCatchSTM
 --
 -- @since 2.1.0
 waitAnyCatchSTM :: [Async a] -> STM (Async a, Either SomeException a)
-waitAnyCatchSTM [] = error "waitAnyCatchSTM: invalid argument: input list must be non-empty"
+waitAnyCatchSTM [] =
+    throwSTM $ ErrorCall
+      "waitAnyCatchSTM: invalid argument: input list must be non-empty"
 waitAnyCatchSTM asyncs =
     foldr orElse retry $
       map (\a -> do r <- waitCatchSTM a; return (a, r)) asyncs
@@ -507,7 +509,9 @@ waitAny = atomically . waitAnySTM
 --
 -- @since 2.1.0
 waitAnySTM :: [Async a] -> STM (Async a, a)
-waitAnySTM [] = error "waitAnySTM: invalid argument: input list must be non-empty"
+waitAnySTM [] =
+    throwSTM $ ErrorCall
+      "waitAnySTM: invalid argument: input list must be non-empty"
 waitAnySTM asyncs =
     foldr orElse retry $
       map (\a -> do r <- waitSTM a; return (a, r)) asyncs
