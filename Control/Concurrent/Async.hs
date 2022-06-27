@@ -466,6 +466,7 @@ cancelWith a@(Async t _) e = throwTo t e <* waitCatch a
 -- | Wait for any of the supplied asynchronous operations to complete.
 -- The value returned is a pair of the 'Async' that completed, and the
 -- result that would be returned by 'wait' on that 'Async'.
+-- The input list must be non-empty.
 --
 -- If multiple 'Async's complete or have completed, then the value
 -- returned corresponds to the first completed 'Async' in the list.
@@ -478,6 +479,9 @@ waitAnyCatch = atomically . waitAnyCatchSTM
 --
 -- @since 2.1.0
 waitAnyCatchSTM :: [Async a] -> STM (Async a, Either SomeException a)
+waitAnyCatchSTM [] =
+    throwSTM $ ErrorCall
+      "waitAnyCatchSTM: invalid argument: input list must be non-empty"
 waitAnyCatchSTM asyncs =
     foldr orElse retry $
       map (\a -> do r <- waitCatchSTM a; return (a, r)) asyncs
@@ -492,6 +496,7 @@ waitAnyCatchCancel asyncs =
 -- | Wait for any of the supplied @Async@s to complete.  If the first
 -- to complete throws an exception, then that exception is re-thrown
 -- by 'waitAny'.
+-- The input list must be non-empty.
 --
 -- If multiple 'Async's complete or have completed, then the value
 -- returned corresponds to the first completed 'Async' in the list.
@@ -504,6 +509,9 @@ waitAny = atomically . waitAnySTM
 --
 -- @since 2.1.0
 waitAnySTM :: [Async a] -> STM (Async a, a)
+waitAnySTM [] =
+    throwSTM $ ErrorCall
+      "waitAnySTM: invalid argument: input list must be non-empty"
 waitAnySTM asyncs =
     foldr orElse retry $
       map (\a -> do r <- waitSTM a; return (a, r)) asyncs
