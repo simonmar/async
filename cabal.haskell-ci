@@ -1,1 +1,2 @@
-ghcup-jobs: > 9.1
+branches: master ci*
+
