@@ -472,24 +472,26 @@ cancelWith a@(Async t _) e = throwTo t e <* waitCatch a
 -- returned corresponds to the first completed 'Async' in the list.
 --
 {-# INLINE waitAnyCatch #-}
-waitAnyCatch :: [Async a] -> IO (Async a, Either SomeException a)
+waitAnyCatch :: Foldable t => t (Async a) -> IO (Async a, Either SomeException a)
 waitAnyCatch = atomically . waitAnyCatchSTM
 
 -- | A version of 'waitAnyCatch' that can be used inside an STM transaction.
 --
 -- @since 2.1.0
-waitAnyCatchSTM :: [Async a] -> STM (Async a, Either SomeException a)
-waitAnyCatchSTM [] =
-    throwSTM $ ErrorCall
+waitAnyCatchSTM :: Foldable t => t (Async a) -> STM (Async a, Either SomeException a)
+waitAnyCatchSTM asyncs
+  | null asyncs
+  = throwSTM $ ErrorCall
       "waitAnyCatchSTM: invalid argument: input list must be non-empty"
-waitAnyCatchSTM asyncs =
-    foldr orElse retry $
-      map (\a -> do r <- waitCatchSTM a; return (a, r)) asyncs
+  | otherwise
+  = foldr go retry asyncs
+  where
+    go a mb = ( do { r <- waitCatchSTM a; return (a, r) } ) `orElse` mb
 
 -- | Like 'waitAnyCatch', but also cancels the other asynchronous
 -- operations as soon as one has completed.
 --
-waitAnyCatchCancel :: [Async a] -> IO (Async a, Either SomeException a)
+waitAnyCatchCancel :: Foldable t => t (Async a) -> IO (Async a, Either SomeException a)
 waitAnyCatchCancel asyncs =
   waitAnyCatch asyncs `finally` mapM_ cancel asyncs
 
@@ -502,24 +504,26 @@ waitAnyCatchCancel asyncs =
 -- returned corresponds to the first completed 'Async' in the list.
 --
 {-# INLINE waitAny #-}
-waitAny :: [Async a] -> IO (Async a, a)
+waitAny :: Foldable t => t (Async a) -> IO (Async a, a)
 waitAny = atomically . waitAnySTM
 
 -- | A version of 'waitAny' that can be used inside an STM transaction.
 --
 -- @since 2.1.0
-waitAnySTM :: [Async a] -> STM (Async a, a)
-waitAnySTM [] =
-    throwSTM $ ErrorCall
-      "waitAnySTM: invalid argument: input list must be non-empty"
-waitAnySTM asyncs =
-    foldr orElse retry $
-      map (\a -> do r <- waitSTM a; return (a, r)) asyncs
+waitAnySTM :: Foldable t => t (Async a) -> STM (Async a, a)
+waitAnySTM asyncs
+  | null asyncs
+  = throwSTM $ ErrorCall
+      "waitAnyCatchSTM: invalid argument: input list must be non-empty"
+  | otherwise
+  = foldr go retry asyncs
+  where
+      go a mb = ( do { r <- waitSTM a; return (a, r) } ) `orElse` mb
 
 -- | Like 'waitAny', but also cancels the other asynchronous
 -- operations as soon as one has completed.
 --
-waitAnyCancel :: [Async a] -> IO (Async a, a)
+waitAnyCancel :: Foldable t => t (Async a) -> IO (Async a, a)
 waitAnyCancel asyncs =
   waitAny asyncs `finally` mapM_ cancel asyncs
 
