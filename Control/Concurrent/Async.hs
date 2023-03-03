@@ -157,7 +157,7 @@ module Control.Concurrent.Async (
 
     -- ** Querying 'Async's
     wait, poll, waitCatch, asyncThreadId,
-    cancel, uninterruptibleCancel, cancelWith, AsyncCancelled(..),
+    cancel, cancelMany, uninterruptibleCancel, cancelWith, AsyncCancelled(..),
 
     -- ** #high-level-utilities# High-level utilities
     race, race_,
@@ -432,6 +432,14 @@ pollSTM (Async _ w) = (Just <$> w) `orElse` return Nothing
 cancel :: Async a -> IO ()
 cancel a@(Async t _) = throwTo t AsyncCancelled <* waitCatch a
 
+-- | Cancel multiple asynchronous actions by throwing the @AsyncCancelled@
+-- exception to each of them in turn, then waiting for all the `Async` threads
+-- to complete.
+cancelMany :: [Async a] -> IO ()
+cancelMany as = do
+  mapM_ (\(Async t _) -> throwTo t AsyncCancelled) as
+  mapM_ waitCatch as
+
 -- | The exception thrown by `cancel` to terminate a thread.
 data AsyncCancelled = AsyncCancelled
   deriving (Show, Eq
@@ -491,7 +499,7 @@ waitAnyCatchSTM asyncs =
 --
 waitAnyCatchCancel :: [Async a] -> IO (Async a, Either SomeException a)
 waitAnyCatchCancel asyncs =
-  waitAnyCatch asyncs `finally` mapM_ cancel asyncs
+  waitAnyCatch asyncs `finally` cancelMany asyncs
 
 -- | Wait for any of the supplied @Async@s to complete.  If the first
 -- to complete throws an exception, then that exception is re-thrown
@@ -521,7 +529,7 @@ waitAnySTM asyncs =
 --
 waitAnyCancel :: [Async a] -> IO (Async a, a)
 waitAnyCancel asyncs =
-  waitAny asyncs `finally` mapM_ cancel asyncs
+  waitAny asyncs `finally` cancelMany asyncs
 
 -- | Wait for the first of two @Async@s to finish.
 {-# INLINE waitEitherCatch #-}
@@ -552,7 +560,7 @@ waitEitherCatchCancel :: Async a -> Async b
                       -> IO (Either (Either SomeException a)
                                     (Either SomeException b))
 waitEitherCatchCancel left right =
-  waitEitherCatch left right `finally` (cancel left >> cancel right)
+  waitEitherCatch left right `finally` cancelMany [() <$ left, () <$ right]
 
 -- | Wait for the first of two @Async@s to finish.  If the @Async@
 -- that finished first raised an exception, then the exception is
@@ -591,7 +599,7 @@ waitEitherSTM_ left right =
 --
 waitEitherCancel :: Async a -> Async b -> IO (Either a b)
 waitEitherCancel left right =
-  waitEither left right `finally` (cancel left >> cancel right)
+  waitEither left right `finally` cancelMany [() <$ left, () <$ right]
 
 -- | Waits for both @Async@s to finish, but if either of them throws
 -- an exception before they have both finished, then the exception is
