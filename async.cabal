@@ -35,9 +35,10 @@ cabal-version:       >=1.10
 homepage:            https://github.com/simonmar/async
 bug-reports:         https://github.com/simonmar/async/issues
 tested-with:
-    GHC == 9.6.1
-    GHC == 9.4.4
-    GHC == 9.2.7
+    GHC == 9.8.1
+    GHC == 9.6.3
+    GHC == 9.4.7
+    GHC == 9.2.8
     GHC == 9.0.2
     GHC == 8.10.7
     GHC == 8.8.4
@@ -46,11 +47,12 @@ tested-with:
     GHC == 8.2.2
     GHC == 8.0.2
     GHC == 7.10.3
-    GHC == 7.8.4
-    GHC == 7.6.3
-    GHC == 7.4.2
-    GHC == 7.2.2
-    GHC == 7.0.4
+    -- Drop GHC < 7.10 to be able to use the ubuntu-20.04 buildpack
+    -- GHC == 7.8.4
+    -- GHC == 7.6.3
+    -- GHC == 7.4.2
+    -- GHC == 7.2.2
+    -- GHC == 7.0.4
 
 extra-source-files:
     changelog.md
@@ -66,7 +68,7 @@ library
     if impl(ghc>=7.1)
         other-extensions: Trustworthy
     exposed-modules:     Control.Concurrent.Async
-    build-depends:       base     >= 4.3     && < 4.19,
+    build-depends:       base     >= 4.3     && < 4.20,
                          hashable >= 1.1.2.0 && < 1.5,
                          stm      >= 2.2     && < 2.6
 
