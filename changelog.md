@@ -1,3 +1,14 @@
+## Changes in 2.2.5
+
+ - Support for GHC 9.4, 9.6, 9.8
+ - Add cancelMany
+ - #138: expose internals as Control.Concurrent.Async.Internal
+ - #132: waitAny(Catch): clarify non-empty input list requirement
+ - #131:
+ - #120: Add ConcurrentlyE
+ - Document that empty for Concurrently waits forever.
+
+
 ## Changes in 2.2.4:
 
  - Support for GHC 9.2
