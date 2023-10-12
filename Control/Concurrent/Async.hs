@@ -730,6 +730,7 @@ race :: IO a -> IO b -> IO (Either a b)
 --
 race_ :: IO a -> IO b -> IO ()
 
+
 -- | Run two @IO@ actions concurrently, and return both results.  If
 -- either action throws an exception at any time, then the other
 -- action is 'cancel'led, and the exception is re-thrown by
@@ -957,29 +958,6 @@ instance Alternative Concurrently where
   Concurrently as <|> Concurrently bs =
     Concurrently $ either id id <$> race as bs
 
--- | A value of type @ConcurrentlyE e a@ is an @IO@ operation that can be
--- composed with other @ConcurrentlyE@ values, using the @Applicative@ instance.
---
--- Calling @runConcurrentlyE@ on a value of type @ConcurrentlyE e a@ will
--- execute the @IO@ operations it contains concurrently, before delivering
--- either the result of type @a@, or an error of type @e@ if one of the actions
--- returns @Left@.
-newtype ConcurrentlyE e a = ConcurrentlyE { runConcurrentlyE :: IO (Either e a) }
-
-instance Functor (ConcurrentlyE e) where
-  fmap f (ConcurrentlyE ea) = ConcurrentlyE $ fmap (fmap f) ea
-
-#if MIN_VERSION_base(4,8,0)
-instance Bifunctor ConcurrentlyE where
-  bimap f g (ConcurrentlyE ea) = ConcurrentlyE $ fmap (bimap f g) ea
-#endif
-
-instance Applicative (ConcurrentlyE e) where
-  pure = ConcurrentlyE . return . return
-  ConcurrentlyE fs <*> ConcurrentlyE eas =
-    ConcurrentlyE $ fmap (\(f, a) -> f a) <$> concurrentlyE fs eas
-
-
 #if MIN_VERSION_base(4,9,0)
 -- | Only defined by @async@ for @base >= 4.9@
 --
@@ -996,6 +974,40 @@ instance (Semigroup a, Monoid a) => Monoid (Concurrently a) where
 instance Monoid a => Monoid (Concurrently a) where
   mempty = pure mempty
   mappend = liftA2 mappend
+#endif
+
+-- | A value of type @ConcurrentlyE e a@ is an @IO@ operation that can be
+-- composed with other @ConcurrentlyE@ values, using the @Applicative@ instance.
+--
+-- Calling @runConcurrentlyE@ on a value of type @ConcurrentlyE e a@ will
+-- execute the @IO@ operations it contains concurrently, before delivering
+-- either the result of type @a@, or an error of type @e@ if one of the actions
+-- returns @Left@.
+--
+-- | @since 2.2.5
+newtype ConcurrentlyE e a = ConcurrentlyE { runConcurrentlyE :: IO (Either e a) }
+
+instance Functor (ConcurrentlyE e) where
+  fmap f (ConcurrentlyE ea) = ConcurrentlyE $ fmap (fmap f) ea
+
+#if MIN_VERSION_base(4,8,0)
+instance Bifunctor ConcurrentlyE where
+  bimap f g (ConcurrentlyE ea) = ConcurrentlyE $ fmap (bimap f g) ea
+#endif
+
+instance Applicative (ConcurrentlyE e) where
+  pure = ConcurrentlyE . return . return
+  ConcurrentlyE fs <*> ConcurrentlyE eas =
+    ConcurrentlyE $ fmap (\(f, a) -> f a) <$> concurrentlyE fs eas
+
+#if MIN_VERSION_base(4,9,0)
+-- | Either the combination of the successful results, or the first failure. 
+instance Semigroup a => Semigroup (ConcurrentlyE e a) where
+  (<>) = liftA2 (<>)
+
+instance (Semigroup a, Monoid a) => Monoid (ConcurrentlyE e a) where
+  mempty = pure mempty
+  mappend = (<>)
 #endif
 
 -- ----------------------------------------------------------------------------

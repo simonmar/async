@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables,DeriveDataTypeable #-}
+{-# LANGUAGE CPP,ScopedTypeVariables,DeriveDataTypeable #-}
 module Main where
 
 import Test.Framework (defaultMain, testGroup)
@@ -14,7 +14,8 @@ import Data.Typeable
 import Control.Concurrent
 import Control.Monad
 import Control.Applicative
-import Data.List (sort)
+import Data.List (sort, permutations)
+import Data.Foldable (foldMap)
 import Data.Maybe
 
 import Prelude hiding (catch)
@@ -60,6 +61,10 @@ tests = [
       , testCase "concurrentlyE_left2" concurrentlyE_left2
       , testCase "concurrentlyE_earlyException" concurrentlyE_earlyException
       , testCase "concurrentlyE_lateException" concurrentlyE_lateException
+#if MIN_VERSION_base(4,9,0)
+      , testCase "concurrentlyE_Monoid" concurrentlyE_Monoid
+      , testCase "concurrentlyE_Monoid_fail" concurrentlyE_Monoid_fail
+#endif
   ]
  ]
 
@@ -433,3 +438,24 @@ concurrentlyE_lateException = do
             (threadDelay 100000 *> throwIO TestException)
     refVal <- readIORef ref
     assertEqual "should be Exception" (Left TestException, "never filled") (r, refVal)
+
+#if MIN_VERSION_base(4,9,0)
+concurrentlyE_Monoid :: Assertion
+concurrentlyE_Monoid = do
+    let delays :: [Int]
+        delays = [1000, 10000, 100000]
+        actions = zipWith (*>) (threadDelay <$> delays) (pure . Right . (:[]) <$> ['a'..])
+    r :: Either () String <- runConcurrentlyE $ foldMap ConcurrentlyE $ actions
+    assertEqual "Combined result in order" (Right "abc") r
+
+concurrentlyE_Monoid_fail :: Assertion
+concurrentlyE_Monoid_fail = do
+    let delays :: [Int]
+        delays = [1000, 200000]
+        actions = zipWith (*>) (threadDelay <$> delays) (pure . Right . (:[]) <$> ['a'..])
+        failDelays = [10000, 100000]
+        failActions = zipWith (*>) (threadDelay <$> delays) (pure . Left <$> ['u'..])
+    forM_ (permutations (actions ++ failActions)) $ \current -> do
+        r :: Either Char [Char] <- runConcurrentlyE $ foldMap ConcurrentlyE $ current
+        assertEqual "The earliest failure" (Left 'u') r
+#endif
