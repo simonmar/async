@@ -55,7 +55,7 @@ import Data.IORef
 
 import GHC.Exts
 import GHC.IO hiding (finally, onException)
-import GHC.Conc
+import GHC.Conc (ThreadId(..))
 
 -- -----------------------------------------------------------------------------
 -- STM Async API
@@ -575,7 +575,7 @@ concurrently :: IO a -> IO b -> IO (a,b)
 
 -- | Run two @IO@ actions concurrently. If both of them end with @Right@,
 -- return both results.  If one of then ends with @Left@, interrupt the other
--- action and return the @Left@. 
+-- action and return the @Left@.
 --
 concurrentlyE :: IO (Either e a) -> IO (Either e b) -> IO (Either e (a, b))
 
@@ -831,7 +831,7 @@ instance Applicative (ConcurrentlyE e) where
     ConcurrentlyE $ fmap (\(f, a) -> f a) <$> concurrentlyE fs eas
 
 #if MIN_VERSION_base(4,9,0)
--- | Either the combination of the successful results, or the first failure. 
+-- | Either the combination of the successful results, or the first failure.
 instance Semigroup a => Semigroup (ConcurrentlyE e a) where
   (<>) = liftA2 (<>)
 
