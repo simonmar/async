@@ -49,7 +49,9 @@ import Data.Bifunctor
 #if MIN_VERSION_base(4,9,0)
 import Data.Semigroup (Semigroup((<>)))
 #endif
+#ifdef HASHABLE
 import Data.Hashable (Hashable(hashWithSalt))
+#endif
 
 import Data.IORef
 
@@ -79,8 +81,10 @@ instance Eq (Async a) where
 instance Ord (Async a) where
   Async a _ `compare` Async b _  =  a `compare` b
 
+#ifdef HASHABLE
 instance Hashable (Async a) where
   hashWithSalt salt (Async a _) = hashWithSalt salt a
+#endif
 
 instance Functor Async where
   fmap f (Async a w) = Async a (fmap (fmap f) w)
