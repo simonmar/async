@@ -35,9 +35,10 @@ cabal-version:       >=1.10
 homepage:            https://github.com/simonmar/async
 bug-reports:         https://github.com/simonmar/async/issues
 tested-with:
-    GHC == 9.8.1
-    GHC == 9.6.3
-    GHC == 9.4.7
+    GHC == 9.10.0
+    GHC == 9.8.2
+    GHC == 9.6.4
+    GHC == 9.4.8
     GHC == 9.2.8
     GHC == 9.0.2
     GHC == 8.10.7
@@ -69,7 +70,7 @@ library
         other-extensions: Trustworthy
     exposed-modules:     Control.Concurrent.Async
                          Control.Concurrent.Async.Internal
-    build-depends:       base     >= 4.3     && < 4.20,
+    build-depends:       base     >= 4.3     && < 4.21,
                          hashable >= 1.1.2.0 && < 1.5,
                          stm      >= 2.2     && < 2.6
 
