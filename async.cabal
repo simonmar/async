@@ -64,6 +64,16 @@ source-repository head
     type: git
     location: https://github.com/simonmar/async.git
 
+flag debug-auto-label
+   description:
+     Strictly for debugging as it might have a non-negligible overhead.
+
+     Enabling this flag will auto-label the threads spawned by @async@. Use it to
+     find where are unlabelled threads spawned in your program (be it your code or
+     dependency code).
+   default: False
+   manual: True
+
 library
     default-language:    Haskell2010
     other-extensions:    CPP, MagicHash, RankNTypes, UnboxedTuples
@@ -74,6 +84,8 @@ library
     build-depends:       base     >= 4.3     && < 4.22,
                          hashable >= 1.1.2.0 && < 1.6,
                          stm      >= 2.2     && < 2.6
+    if flag(debug-auto-label)
+      cpp-options: -DDEBUG_AUTO_LABEL
 
 test-suite test-async
     default-language: Haskell2010
