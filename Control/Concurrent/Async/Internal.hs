@@ -189,7 +189,8 @@ withAsyncUsing doFork = \action inner -> do
 
 
 -- | This function attempts at rethrowing while keeping the context
--- This is internal and only working with GHC >=9.12
+-- This is internal and only working with GHC >=9.12, otherwise it fallsback to
+-- standard 'throwIO'
 rethrowIO' :: SomeException -> IO a
 #if MIN_VERSION_base(4,21,0)
 rethrowIO' e = 
@@ -242,7 +243,20 @@ poll = atomically . pollSTM
 waitSTM :: Async a -> STM a
 waitSTM a = do
    r <- waitCatchSTM a
-   either throwSTM return r
+   either (rethrowSTM) return r
+
+-- | This function attempts at rethrowing while keeping the context
+-- This is internal and only working with GHC >=9.12, otherwise it fallsback to
+-- standard 'throwSTM'
+rethrowSTM :: SomeException -> STM a
+#if MIN_VERSION_base(4,21,0)
+rethrowSTM e = 
+  case fromException e of
+    Just (e' :: ExceptionWithContext SomeException) -> throwSTM (NoBacktrace e')
+    Nothing -> throwSTM e
+#else
+rethrowSTM = throwSTM
+#endif
 
 -- | A version of 'waitCatch' that can be used inside an STM transaction.
 --
