@@ -242,7 +242,12 @@ poll = atomically . pollSTM
 waitSTM :: Async a -> STM a
 waitSTM a = do
    r <- waitCatchSTM a
-   either throwSTM return r
+   either (rethrowSTM) return r
+
+rethrowSTM e = 
+  case fromException e of
+    Just (e' :: ExceptionWithContext SomeException) -> throwSTM (NoBacktrace e')
+    Nothing -> throwSTM e
 
 -- | A version of 'waitCatch' that can be used inside an STM transaction.
 --
