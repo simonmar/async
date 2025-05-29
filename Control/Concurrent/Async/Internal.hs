@@ -58,7 +58,13 @@ import GHC.IO hiding (finally, onException)
 import GHC.Conc (ThreadId(..))
 
 #ifdef DEBUG_AUTO_LABEL
-import GHC.Stack
+import qualified GHC.Stack
+#endif
+
+#ifdef DEBUG_AUTO_LABEL
+#define CALLSTACK GHC.Stack.HasCallStack =>
+#else
+#define CALLSTACK
 #endif
 
 -- -----------------------------------------------------------------------------
@@ -100,25 +106,19 @@ compareAsyncs (Async t1 _) (Async t2 _) = compare t1 t2
 --
 -- __Use 'withAsync' style functions wherever you can instead!__
 async ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   IO a -> IO (Async a)
 async = inline asyncUsing rawForkIO
 
 -- | Like 'async' but using 'forkOS' internally.
 asyncBound ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   IO a -> IO (Async a)
 asyncBound = asyncUsing forkOS
 
 -- | Like 'async' but using 'forkOn' internally.
 asyncOn ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   Int -> IO a -> IO (Async a)
 asyncOn = asyncUsing . rawForkOn
 
@@ -126,9 +126,7 @@ asyncOn = asyncUsing . rawForkOn
 -- thread is passed a function that can be used to unmask asynchronous
 -- exceptions.
 asyncWithUnmask ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   ((forall b . IO b -> IO b) -> IO a) -> IO (Async a)
 asyncWithUnmask actionWith = asyncUsing rawForkIO (actionWith unsafeUnmask)
 
@@ -136,17 +134,13 @@ asyncWithUnmask actionWith = asyncUsing rawForkIO (actionWith unsafeUnmask)
 -- child thread is passed a function that can be used to unmask
 -- asynchronous exceptions.
 asyncOnWithUnmask ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   Int -> ((forall b . IO b -> IO b) -> IO a) -> IO (Async a)
 asyncOnWithUnmask cpu actionWith =
   asyncUsing (rawForkOn cpu) (actionWith unsafeUnmask)
 
 asyncUsing ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   (IO () -> IO ThreadId) -> IO a -> IO (Async a)
 asyncUsing doFork = \action -> do
    var <- newEmptyTMVarIO
@@ -174,25 +168,19 @@ asyncUsing doFork = \action -> do
 -- linear memory.
 --
 withAsync ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   IO a -> (Async a -> IO b) -> IO b
 withAsync = inline withAsyncUsing rawForkIO
 
 -- | Like 'withAsync' but uses 'forkOS' internally.
 withAsyncBound ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   IO a -> (Async a -> IO b) -> IO b
 withAsyncBound = withAsyncUsing forkOS
 
 -- | Like 'withAsync' but uses 'forkOn' internally.
 withAsyncOn ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   Int -> IO a -> (Async a -> IO b) -> IO b
 withAsyncOn = withAsyncUsing . rawForkOn
 
@@ -200,9 +188,7 @@ withAsyncOn = withAsyncUsing . rawForkOn
 -- child thread is passed a function that can be used to unmask
 -- asynchronous exceptions.
 withAsyncWithUnmask ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   ((forall c. IO c -> IO c) -> IO a) -> (Async a -> IO b) -> IO b
 withAsyncWithUnmask actionWith =
   withAsyncUsing rawForkIO (actionWith unsafeUnmask)
@@ -211,17 +197,13 @@ withAsyncWithUnmask actionWith =
 -- child thread is passed a function that can be used to unmask
 -- asynchronous exceptions
 withAsyncOnWithUnmask ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   Int -> ((forall c. IO c -> IO c) -> IO a) -> (Async a -> IO b) -> IO b
 withAsyncOnWithUnmask cpu actionWith =
   withAsyncUsing (rawForkOn cpu) (actionWith unsafeUnmask)
 
 withAsyncUsing ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   (IO () -> IO ThreadId) -> IO a -> (Async a -> IO b) -> IO b
 -- The bracket version works, but is slow.  We can do better by
 -- hand-coding it:
@@ -606,17 +588,13 @@ isCancel e
 -- >   waitEither a b
 --
 race ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   IO a -> IO b -> IO (Either a b)
 
 -- | Like 'race', but the result is ignored.
 --
 race_ ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   IO a -> IO b -> IO ()
 
 
@@ -630,9 +608,7 @@ race_ ::
 -- >   withAsync right $ \b ->
 -- >   waitBoth a b
 concurrently ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   IO a -> IO b -> IO (a,b)
 
 
@@ -641,18 +617,14 @@ concurrently ::
 -- action and return the @Left@.
 --
 concurrentlyE ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   IO (Either e a) -> IO (Either e b) -> IO (Either e (a, b))
 
 -- | 'concurrently', but ignore the result values
 --
 -- @since 2.1.1
 concurrently_ ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   IO a -> IO b -> IO ()
 
 #define USE_ASYNC_VERSIONS 0
@@ -715,9 +687,7 @@ concurrentlyE left right = concurrently' left right (collect [])
             Right r -> collect (r:xs) m
 
 concurrently' ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   IO a -> IO b
   -> (IO (Either SomeException (Either a b)) -> IO r)
   -> IO r
@@ -797,9 +767,7 @@ concurrently_ left right = concurrently' left right (collect 0)
 -- inputs without care may lead to resource exhaustion (of memory,
 -- file descriptors, or other limited resources).
 mapConcurrently ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   Traversable t => (a -> IO b) -> t a -> IO (t b)
 mapConcurrently f = runConcurrently . traverse (Concurrently . f)
 
@@ -809,27 +777,21 @@ mapConcurrently f = runConcurrently . traverse (Concurrently . f)
 --
 -- @since 2.1.0
 forConcurrently ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   Traversable t => t a -> (a -> IO b) -> IO (t b)
 forConcurrently = flip mapConcurrently
 
 -- | `mapConcurrently_` is `mapConcurrently` with the return value discarded;
 -- a concurrent equivalent of 'mapM_'.
 mapConcurrently_ ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   F.Foldable f => (a -> IO b) -> f a -> IO ()
 mapConcurrently_ f = runConcurrently . F.foldMap (Concurrently . void . f)
 
 -- | `forConcurrently_` is `forConcurrently` with the return value discarded;
 -- a concurrent equivalent of 'forM_'.
 forConcurrently_ ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   F.Foldable f => f a -> (a -> IO b) -> IO ()
 forConcurrently_ = flip mapConcurrently_
 
@@ -837,9 +799,7 @@ forConcurrently_ = flip mapConcurrently_
 --
 -- @since 2.1.1
 replicateConcurrently ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   Int -> IO a -> IO [a]
 replicateConcurrently cnt = runConcurrently . sequenceA . replicate cnt . Concurrently
 
@@ -847,9 +807,7 @@ replicateConcurrently cnt = runConcurrently . sequenceA . replicate cnt . Concur
 --
 -- @since 2.1.1
 replicateConcurrently_ ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   Int -> IO a -> IO ()
 replicateConcurrently_ cnt = runConcurrently . F.fold . replicate cnt . Concurrently . void
 
@@ -945,9 +903,7 @@ instance (Semigroup a, Monoid a) => Monoid (ConcurrentlyE e a) where
 -- exception, re-runs the action.  The thread terminates only when the
 -- action runs to completion without raising an exception.
 forkRepeat ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   IO a -> IO ThreadId
 forkRepeat action =
   mask $ \restore ->
@@ -968,9 +924,7 @@ tryAll = try
 -- exception handler.
 {-# INLINE rawForkIO #-}
 rawForkIO ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   IO () -> IO ThreadId
 rawForkIO action = IO $ \ s ->
    case (fork# action_plus s) of (# s1, tid #) -> (# s1, ThreadId tid #)
@@ -979,24 +933,19 @@ rawForkIO action = IO $ \ s ->
 
 {-# INLINE rawForkOn #-}
 rawForkOn ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   Int -> IO () -> IO ThreadId
 rawForkOn (I# cpu) action = IO $ \ s ->
    case (forkOn# cpu action_plus s) of (# s1, tid #) -> (# s1, ThreadId tid #)
   where
    (IO action_plus) = debugLabelMe >> action
 
-
 debugLabelMe ::
-#ifdef DEBUG_AUTO_LABEL
-  HasCallStack =>
-#endif
+  CALLSTACK
   IO ()
 debugLabelMe =
 #ifdef DEBUG_AUTO_LABEL
-  myThreadId >>= flip labelThread (prettyCallStack callStack)
+  myThreadId >>= flip labelThread (GHC.Stack.prettyCallStack callStack)
 #else
   pure ()
 #endif
