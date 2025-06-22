@@ -55,7 +55,7 @@ import Data.IORef
 
 import GHC.Exts
 import GHC.IO hiding (finally, onException)
-import GHC.Conc (ThreadId(..))
+import GHC.Conc (ThreadId(..), labelThread)
 
 -- -----------------------------------------------------------------------------
 -- STM Async API
@@ -126,7 +126,9 @@ asyncUsing doFork = \action -> do
    -- t <- forkFinally action (\r -> atomically $ putTMVar var r)
    -- slightly faster:
    t <- mask $ \restore ->
-          doFork $ try (restore action) >>= atomically . putTMVar var
+          doFork $ do
+              labelMe "async:asyncUsing:doFork"
+              try (restore action) >>= atomically . putTMVar var
    return (Async t (readTMVar var))
 
 -- | Spawn an asynchronous action in a separate thread, and pass its
@@ -178,7 +180,9 @@ withAsyncUsing :: (IO () -> IO ThreadId)
 withAsyncUsing doFork = \action inner -> do
   var <- newEmptyTMVarIO
   mask $ \restore -> do
-    t <- doFork $ try (restore action) >>= atomically . putTMVar var
+    t <- doFork $ do
+        labelMe "async:withAsyncUsing:doFork"
+        try (restore action) >>= atomically . putTMVar var
     let a = Async t (readTMVar var)
     r <- restore (inner a) `catchAll` \e -> do
       uninterruptibleCancel a
@@ -643,6 +647,11 @@ concurrentlyE left right = concurrently' left right (collect [])
             Left ex -> throwIO ex
             Right r -> collect (r:xs) m
 
+labelMe :: String -> IO ()
+labelMe label = do
+    tid <- myThreadId
+    labelThread tid label
+
 concurrently' :: IO a -> IO b
              -> (IO (Either SomeException (Either a b)) -> IO r)
              -> IO r
@@ -684,6 +693,7 @@ concurrently' left right collect = do
                   -- putMVar.
                   when (count' > 0) $
                     void $ forkIO $ do
+                      labelMe "async:concurently':throwTo"
                       throwTo rid AsyncCancelled
                       throwTo lid AsyncCancelled
                   -- ensure the children are really dead
@@ -852,7 +862,7 @@ forkRepeat action =
                 case r of
                   Left _ -> go
                   _      -> return ()
-    in forkIO go
+    in forkIO (labelMe "async:forkRepeat" >> go)
 
 catchAll :: IO a -> (SomeException -> IO a) -> IO a
 catchAll = catch
