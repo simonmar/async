@@ -1,3 +1,9 @@
+## Changes in 2.2.6
+
+ - Added Control.Concurrent.Stream for processing streams with a fixed
+   number of workers. Includes a bounded version of mapConcurrently:
+   mapConcurrentlyBounded.
+
 ## Changes in 2.2.5
 
  - #117: Document that empty for Concurrently waits forever

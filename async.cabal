@@ -1,5 +1,5 @@
 name:                async
-version:             2.2.5
+version:             2.2.6
 -- don't forget to update ./changelog.md!
 synopsis:            Run IO operations asynchronously and wait for their results
 
@@ -81,6 +81,7 @@ library
         other-extensions: Trustworthy
     exposed-modules:     Control.Concurrent.Async
                          Control.Concurrent.Async.Internal
+                         Control.Concurrent.Stream
     build-depends:       base     >= 4.3     && < 4.22,
                          hashable >= 1.1.2.0 && < 1.6,
                          stm      >= 2.2     && < 2.6
@@ -89,6 +90,7 @@ library
 
 test-suite test-async
     default-language: Haskell2010
+    ghc-options: -threaded
     type:       exitcode-stdio-1.0
     hs-source-dirs: test
     main-is:    test-async.hs

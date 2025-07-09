@@ -8,6 +8,7 @@ import Test.HUnit
 
 import Control.Concurrent.STM
 import Control.Concurrent.Async
+import Control.Concurrent.Stream
 import Control.Exception
 import Data.IORef
 import Data.Typeable
@@ -65,6 +66,15 @@ tests = [
       , testCase "concurrentlyE_Monoid" concurrentlyE_Monoid
       , testCase "concurrentlyE_Monoid_fail" concurrentlyE_Monoid_fail
 #endif
+  , testCase "stream" $ case_stream False
+  , testCase "streamBound" $ case_stream True
+  , testCase "stream_exception" $ case_stream_exception False
+  , testCase "streamBound_exception" $ case_stream_exception True
+  , testCase "streamWithInput" case_streamInput
+  , testCase "streamWithInput_exception" case_streamInput_exception
+  , testCase "mapConcurrentlyBounded" case_mapConcurrentlyBounded
+  , testCase "mapConcurrentlyBounded_exception" 
+      case_mapConcurrentlyBounded_exception
   ]
  ]
 
@@ -459,3 +469,53 @@ concurrentlyE_Monoid_fail = do
         r :: Either Char [Char] <- runConcurrentlyE $ foldMap ConcurrentlyE $ current
         assertEqual "The earliest failure" (Left 'u') r
 #endif
+
+case_stream :: Bool -> Assertion
+case_stream bound = do
+  ref <- newIORef []
+  let inp = [1..100]
+  let producer write = forM_ inp $ \x -> write (show x)
+  (if bound then streamBound else stream) 4 producer $ \s -> atomicModifyIORef ref (\l -> (s:l, ()))
+  res <- readIORef ref
+  sort res @?= sort (map show inp)
+
+case_stream_exception :: Bool -> Assertion
+case_stream_exception bound = do
+  let inp = [1..100]
+  let producer write = forM_ inp $ \x -> write (show x)
+  r <- try $ (if bound then streamBound else stream) 4 producer $ \s -> 
+    when (s == "3") $ throwIO (ErrorCall s)
+  r @?= Left (ErrorCall "3" :: ErrorCall)
+
+case_streamInput :: Assertion
+case_streamInput = do
+  ref <- newIORef []
+  let inp = [1..100]; workers = [1..4] :: [Int]
+  let producer write = forM_ inp $ \x -> write (show x)
+  streamWithInput producer workers $ \s t -> atomicModifyIORef ref (\l -> ((s,t):l, ()))
+  res <- readIORef ref
+  sort (map snd res) @?= sort (map show inp)
+  all ((`elem` workers) . fst) res @?= True
+
+case_streamInput_exception :: Assertion
+case_streamInput_exception = do
+  let inp = [1..100]; workers = [1..4] :: [Int]
+  let producer write = forM_ inp $ \x -> write (show x)
+  r <- try $ streamWithInput producer workers $ \s t -> 
+    when (t == "3") $ throwIO (ErrorCall t)
+  r @?= Left (ErrorCall "3" :: ErrorCall)
+
+case_mapConcurrentlyBounded :: Assertion
+case_mapConcurrentlyBounded = do
+  let inp = [1..100]
+  let f x = threadDelay 1000 >> return (x * 2)
+  res <- mapConcurrentlyBounded 4 f inp
+  res @?= map (*2) inp
+
+case_mapConcurrentlyBounded_exception :: Assertion
+case_mapConcurrentlyBounded_exception = do
+  let inp = [1..100]
+  let f x | x == 3 = throwIO $ ErrorCall "3"
+          | otherwise = threadDelay 1000 >> return (x * 2)
+  res <- try $ mapConcurrentlyBounded 4 f inp
+  res @?= Left (ErrorCall "3" :: ErrorCall)
