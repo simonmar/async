@@ -1,3 +1,12 @@
+## Changes in 2.2.6
+
+ - Added Control.Concurrent.Stream for processing streams with a fixed
+   number of workers. Includes a bounded version of mapConcurrently:
+   mapConcurrentlyBounded.
+ - Added Control.Concurrent.Async.Warden for a way to create Asyncs that
+   is more flexible than 'withAsync' but retains the guarantee of cancelling
+   orphaned threads, unlike 'async'.
+
 ## Changes in 2.2.5
 
  - #117: Document that empty for Concurrently waits forever
