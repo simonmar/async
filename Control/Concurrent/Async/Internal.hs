@@ -142,7 +142,7 @@ asyncOnWithUnmask cpu actionWith =
 asyncUsing ::
   CALLSTACK
   (IO () -> IO ThreadId) -> IO a -> IO (Async a)
-asyncUsing doFork = \action -> do
+asyncUsing doFork action = do
    var <- newEmptyTMVarIO
    let action_plus = debugLabelMe >> action
    -- t <- forkFinally action (\r -> atomically $ putTMVar var r)
@@ -207,7 +207,7 @@ withAsyncUsing ::
   (IO () -> IO ThreadId) -> IO a -> (Async a -> IO b) -> IO b
 -- The bracket version works, but is slow.  We can do better by
 -- hand-coding it:
-withAsyncUsing doFork = \action inner -> do
+withAsyncUsing doFork action inner = do
   var <- newEmptyTMVarIO
   mask $ \restore -> do
     let action_plus = debugLabelMe >> action
@@ -734,7 +734,7 @@ concurrently' left right collect = do
                   -- ensure the children are really dead
                   replicateM_ count' (tryAgain $ takeMVar done)
 
-        r <- collect (tryAgain $ takeDone) `onException` stop
+        r <- collect (tryAgain takeDone) `onException` stop
         stop
         return r
 
@@ -801,7 +801,7 @@ forConcurrently_ = flip mapConcurrently_
 replicateConcurrently ::
   CALLSTACK
   Int -> IO a -> IO [a]
-replicateConcurrently cnt = runConcurrently . sequenceA . replicate cnt . Concurrently
+replicateConcurrently cnt = runConcurrently . replicateM cnt . Concurrently
 
 -- | Same as 'replicateConcurrently', but ignore the results.
 --
@@ -927,7 +927,7 @@ rawForkIO ::
   CALLSTACK
   IO () -> IO ThreadId
 rawForkIO action = IO $ \ s ->
-   case (fork# action_plus s) of (# s1, tid #) -> (# s1, ThreadId tid #)
+   case fork# action_plus s of (# s1, tid #) -> (# s1, ThreadId tid #)
   where
     (IO action_plus) = debugLabelMe >> action
 
@@ -936,7 +936,7 @@ rawForkOn ::
   CALLSTACK
   Int -> IO () -> IO ThreadId
 rawForkOn (I# cpu) action = IO $ \ s ->
-   case (forkOn# cpu action_plus s) of (# s1, tid #) -> (# s1, ThreadId tid #)
+   case forkOn# cpu action_plus s of (# s1, tid #) -> (# s1, ThreadId tid #)
   where
    (IO action_plus) = debugLabelMe >> action
 
