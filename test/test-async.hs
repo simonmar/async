@@ -8,6 +8,7 @@ import Test.HUnit
 
 import Control.Concurrent.STM
 import Control.Concurrent.Async
+import Control.Concurrent.Async.Warden
 import Control.Concurrent.Stream
 import Control.Exception
 import Data.IORef
@@ -75,6 +76,8 @@ tests = [
   , testCase "mapConcurrentlyBounded" case_mapConcurrentlyBounded
   , testCase "mapConcurrentlyBounded_exception" 
       case_mapConcurrentlyBounded_exception
+  , testCase "Warden" case_Warden
+  , testCase "Warden_spawn_after_shutdown" case_Warden_spawn_after_shutdown
   ]
  ]
 
@@ -519,3 +522,29 @@ case_mapConcurrentlyBounded_exception = do
           | otherwise = threadDelay 1000 >> return (x * 2)
   res <- try $ mapConcurrentlyBounded 4 f inp
   res @?= Left (ErrorCall "3" :: ErrorCall)
+
+case_Warden :: Assertion
+case_Warden = do
+  a3 <- withWarden $ \warden -> do
+    a1 <- spawn warden $ return 1
+    a2 <- spawnMask warden $ \unmask -> unmask (return 2)
+    a3 <- spawn warden $ threadDelay 10000000
+    spawn_ warden $ throwIO (ErrorCall "a4") -- ignored
+    r1 <- wait a1
+    r1 @?= 1
+    r2 <- wait a2
+    r2 @?= 2
+    return a3
+  r3 <- waitCatch a3
+  case r3 of
+    Right _ -> assertFailure "Expected AsyncCancelled"
+    Left e -> fromException e @?= Just AsyncCancelled
+
+case_Warden_spawn_after_shutdown :: Assertion
+case_Warden_spawn_after_shutdown = do
+  warden <- create
+  shutdown warden
+  r <- try $ spawn warden $ return ()
+  case r of
+    Left (WardenException{}) -> return ()  -- expected
+    Right _ -> assertFailure "Expected WardenException"
