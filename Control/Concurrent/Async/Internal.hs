@@ -298,6 +298,8 @@ cancel a@(Async t _) = throwTo t AsyncCancelled <* waitCatch a
 -- | Cancel multiple asynchronous actions by throwing the @AsyncCancelled@
 -- exception to each of them in turn, then waiting for all the `Async` threads
 -- to complete.
+--
+-- @since 2.2.5
 cancelMany :: [Async a] -> IO ()
 cancelMany as = do
   mapM_ (\(Async t _) -> throwTo t AsyncCancelled) as
