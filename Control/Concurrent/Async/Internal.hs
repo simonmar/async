@@ -55,7 +55,7 @@ import Data.IORef
 
 import GHC.Exts
 import GHC.IO hiding (finally, onException)
-import GHC.Conc (ThreadId(..))
+import GHC.Conc (ThreadId(..), labelThread)
 
 #ifdef DEBUG_AUTO_LABEL
 import qualified GHC.Stack
@@ -539,6 +539,7 @@ linkOnly
 linkOnly shouldThrow a = do
   me <- myThreadId
   void $ forkRepeat $ do
+    myThreadId >>= flip labelThread ("linkOnly " ++ show (asyncThreadId a) ++ " -> " ++ show me)
     r <- waitCatch a
     case r of
       Left e | shouldThrow e -> throwTo me (ExceptionInLinkedThread a e)
@@ -731,6 +732,7 @@ concurrently' left right collect = do
                   -- putMVar.
                   when (count' > 0) $
                     void $ forkIO $ do
+                      myThreadId >>= flip labelThread "concurrent stop"
                       throwTo rid AsyncCancelled
                       throwTo lid AsyncCancelled
                   -- ensure the children are really dead
