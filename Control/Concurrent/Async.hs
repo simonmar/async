@@ -19,7 +19,7 @@
 -- == High-level API
 --
 -- @async@'s high-level API spawns /lexically scoped/ threads,
--- ensuring the following key poperties that make it safer to use
+-- ensuring the following key properties that make it safer to use
 -- than using plain 'forkIO':
 --
 -- 1. No exception is swallowed (waiting for results propagates exceptions).
