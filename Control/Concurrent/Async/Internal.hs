@@ -609,6 +609,9 @@ race_ ::
 -- >   withAsync left $ \a ->
 -- >   withAsync right $ \b ->
 -- >   waitBoth a b
+--
+-- To run more than two actions concurrently, refer to the documentation
+-- of 'mapConcurrently'.
 concurrently ::
   CALLSTACK
   IO a -> IO b -> IO (a,b)
@@ -763,6 +766,12 @@ concurrently_ left right = concurrently' left right (collect 0)
 -- For example, @mapConcurrently@ works with lists:
 --
 -- > pages <- mapConcurrently getURL ["url1", "url2", "url3"]
+--
+-- A list of tasks can also be given, to run more than two functions
+-- 'concurrently':
+-- 
+-- > runAllConcurrently = mapConcurrently id
+-- > results <- runAllConcurrently [fun1, fun2, fun3]
 --
 -- Take into account that @async@ will try to immediately spawn a thread
 -- for each element of the @Traversable@, so running this on large
