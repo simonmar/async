@@ -33,8 +33,8 @@ import System.IO (fixIO)
 
 #if defined(__MHS__)
 import Prelude hiding(mapM_)
-import Data.Foldable(mapM_)
 import Control.Monad hiding(mapM_)
+import Data.Foldable(mapM_)
 #else
 import Control.Monad
 #endif
