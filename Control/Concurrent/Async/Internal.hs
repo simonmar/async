@@ -57,6 +57,10 @@ import GHC.Exts
 import GHC.IO hiding (finally, onException)
 import GHC.Conc (ThreadId(..))
 
+#if defined(__MHS__)
+import Data.Traversable
+#endif
+
 #ifdef DEBUG_AUTO_LABEL
 import qualified GHC.Stack
 #endif
