@@ -8,9 +8,9 @@
 #
 # For more information, see https://github.com/haskell-CI/haskell-ci
 #
-# version: 0.19.20260102
+# version: 0.19.20260104
 #
-# REGENDATA ("0.19.20260102",["github","async.cabal"])
+# REGENDATA ("0.19.20260104",["github","async.cabal"])
 #
 name: Haskell-CI
 on:
@@ -35,6 +35,11 @@ jobs:
     strategy:
       matrix:
         include:
+          - compiler: ghc-9.14.1
+            compilerKind: ghc
+            compilerVersion: 9.14.1
+            setup-method: ghcup
+            allow-failure: false
           - compiler: ghc-9.12.2
             compilerKind: ghc
             compilerVersion: 9.12.2
