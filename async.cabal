@@ -35,6 +35,7 @@ cabal-version:       >=1.10
 homepage:            https://github.com/simonmar/async
 bug-reports:         https://github.com/simonmar/async/issues
 tested-with:
+    GHC == 9.14.1
     GHC == 9.12.2
     GHC == 9.10.2
     GHC == 9.8.4
@@ -83,7 +84,7 @@ library
                          Control.Concurrent.Async.Internal
                          Control.Concurrent.Async.Warden
                          Control.Concurrent.Stream
-    build-depends:       base     >= 4.3     && < 4.22,
+    build-depends:       base     >= 4.3     && < 4.23,
                          hashable >= 1.1.2.0 && < 1.6,
                          stm      >= 2.2     && < 2.6,
                          unordered-containers >= 0.2 && < 0.3
