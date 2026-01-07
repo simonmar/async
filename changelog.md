@@ -6,6 +6,8 @@
  - Added Control.Concurrent.Async.Warden for a way to create Asyncs that
    is more flexible than 'withAsync' but retains the guarantee of cancelling
    orphaned threads, unlike 'async'.
+ - support GHC 9.12, GHC 9.14, and MicroHs
+ - cabal flag debug-auto-label: label threads automatically (#167)
 
 ## Changes in 2.2.5
 
