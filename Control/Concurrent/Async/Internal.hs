@@ -7,6 +7,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 #endif
 {-# OPTIONS -Wall #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -219,9 +220,22 @@ withAsyncUsing doFork action inner = do
     let a = Async t (readTMVar var)
     r <- restore (inner a) `catchAll` \e -> do
       uninterruptibleCancel a
-      throwIO e
+      rethrowIO' e
     uninterruptibleCancel a
     return r
+
+
+-- | This function attempts at rethrowing while keeping the context
+-- This is internal and only working with GHC >=9.12
+rethrowIO' :: SomeException -> IO a
+#if MIN_VERSION_base(4,21,0)
+rethrowIO' e = 
+  case fromException e of
+    Just (e' :: ExceptionWithContext SomeException) -> rethrowIO e'
+    Nothing -> throwIO e
+#else
+rethrowIO' = throwIO
+#endif
 
 -- | Wait for an asynchronous action to complete, and return its
 -- value.  If the asynchronous action threw an exception, then the
@@ -265,7 +279,12 @@ poll = atomically . pollSTM
 waitSTM :: Async a -> STM a
 waitSTM a = do
    r <- waitCatchSTM a
-   either throwSTM return r
+   either (rethrowSTM) return r
+
+rethrowSTM e = 
+  case fromException e of
+    Just (e' :: ExceptionWithContext SomeException) -> throwSTM (NoBacktrace e')
+    Nothing -> throwSTM e
 
 -- | A version of 'waitCatch' that can be used inside an STM transaction.
 --
@@ -664,7 +683,7 @@ race left right = concurrently' left right collect
     collect m = do
         e <- m
         case e of
-            Left ex -> throwIO ex
+            Left ex -> rethrowIO' ex
             Right r -> return r
 
 -- race_ :: IO a -> IO b -> IO ()
@@ -678,7 +697,7 @@ concurrently left right = concurrently' left right (collect [])
     collect xs m = do
         e <- m
         case e of
-            Left ex -> throwIO ex
+            Left ex -> rethrowIO' ex
             Right r -> collect (r:xs) m
 
 -- concurrentlyE :: IO (Either e a) -> IO (Either e b) -> IO (Either e (a, b))
@@ -691,7 +710,7 @@ concurrentlyE left right = concurrently' left right (collect [])
     collect xs m = do
         e <- m
         case e of
-            Left ex -> throwIO ex
+            Left ex -> rethrowIO' ex
             Right r -> collect (r:xs) m
 
 concurrently' ::
@@ -752,7 +771,7 @@ concurrently_ left right = concurrently' left right (collect 0)
     collect i m = do
         e <- m
         case e of
-            Left ex -> throwIO ex
+            Left ex -> rethrowIO' ex
             Right _ -> collect (i + 1 :: Int) m
 
 
