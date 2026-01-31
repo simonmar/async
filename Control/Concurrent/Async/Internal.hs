@@ -265,12 +265,12 @@ rethrowIO' e =
 rethrowIO' = throwIO
 #endif
 
-#if MIN_VERSION_base(4,21,0)
 -- | An exception annotation which stores the callstack of a 'wait',
 -- 'waitBoth', 'waitEither' call.
 data AsyncWaitLocation = AsyncWaitLocation CallStack
   deriving (Show)
 
+#if MIN_VERSION_base(4,21,0)
 instance ExceptionAnnotation AsyncWaitLocation where
   displayExceptionAnnotation (AsyncWaitLocation callstack) = "AsyncWaitLocation " <> prettyCallStack callstack
 

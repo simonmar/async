@@ -23,11 +23,12 @@ import Data.Maybe
 
 import Prelude hiding (catch)
 #if MIN_VERSION_base(4,21,0)
-import Control.Exception.Annotation (ExceptionAnnotation(..))
-import Control.Exception.Context (displayExceptionContext, getExceptionAnnotations)
-import Control.Exception.Backtrace (Backtraces, displayBacktraces)
+import Control.Exception.Annotation
+import Control.Exception.Context
+import Control.Exception.Backtrace
 #endif
 import GHC.Stack (HasCallStack)
+import Debug.Trace
 
 main = defaultMain tests
 
@@ -631,7 +632,39 @@ exception_rethrow = [
         wait a,
     testCase "withAsync inside" $ compareTwoExceptions $ \action -> do
       withAsync doForever $ \a -> do
-        action
+        action,
+
+    testCase "withAsync does not wrap with WhileHandling and contain an asyncWaitLocation" $ do
+      -- This test is fragile. It checks that when calling `wait` on an async,
+      -- we end up with at least two interesting annotations: the backtrace
+      -- which shows the localisation of the exception thrown in the async, and
+      -- an AsyncWaitLocation which shows the location of the wait call.
+      --
+      -- It also checks that no other annotation are provided (for example, a
+      -- "WhileHandling")
+      --
+      -- However, this can change in future GHC version, for example, new
+      -- annotations may be added, or Backtraces may change its type / name.
+      -- Also, depending on the build configuration, maybe there will have
+      -- other backtraces (such as DWARF or IPE, ...)
+      e <- tryWithContext $ do
+        withAsync (throwIO Exc) $ \async -> do
+           wait async
+      case e of
+        Right () -> fail "should have raised an exception"
+        Left (ExceptionWithContext (ExceptionContext annotations) Exc) -> do
+          assertEqual "Only two annotations" (length annotations) 2
+          assertBool "Has AsyncWaitLocation annotation" (any isAsyncWaitLocation annotations)
+          assertBool "Has Backtraces annotation" (any isBacktraces annotations)
     ]
+
+isAsyncWaitLocation (SomeExceptionAnnotation ann) = case cast ann of
+   Just (AsyncWaitLocation _) -> True
+   _ -> traceShow (typeOf ann) False
+
+isBacktraces (SomeExceptionAnnotation ann) = case cast ann of
+   Just (_ :: Backtraces) -> True
+   _ -> False
+
 #endif
 
