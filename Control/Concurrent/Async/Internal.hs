@@ -57,6 +57,12 @@ import Data.IORef
 import GHC.Exts
 import GHC.IO hiding (finally, onException)
 import GHC.Conc (ThreadId(..), labelThread)
+import GHC.Stack (CallStack, callStack, prettyCallStack, withFrozenCallStack)
+
+#if MIN_VERSION_base(4,21,0)
+import Control.Exception.Annotation (ExceptionAnnotation (..))
+#endif
+import GHC.Stack.Types (HasCallStack)
 
 #if defined(__MHS__)
 import Data.Traversable
@@ -259,6 +265,30 @@ rethrowIO' e =
 rethrowIO' = throwIO
 #endif
 
+#if MIN_VERSION_base(4,21,0)
+-- | An exception annotation which stores the callstack of a 'wait',
+-- 'waitBoth', 'waitEither' call.
+data AsyncWaitLocation = AsyncWaitLocation CallStack
+  deriving (Show)
+
+instance ExceptionAnnotation AsyncWaitLocation where
+  displayExceptionAnnotation (AsyncWaitLocation callstack) = "AsyncWaitLocation " <> prettyCallStack callstack
+
+-- | Annotate an exception with the current callstack with GHC >= 9.12
+annotateWithCallSite :: HasCallStack => IO b -> IO b
+annotateWithCallSite action = do
+  resM <- tryWithContext action
+  case resM of
+    Right res -> pure res
+    Left (exc :: ExceptionWithContext SomeException) -> do
+      annotateIO (AsyncWaitLocation callStack) $ rethrowIO exc
+#else
+-- | Do nothing with GHC < 9.12
+annotateWithCallSite :: HasCallStack => IO b -> IO b
+annotateWithCallSite action = action
+#endif
+
+
 -- | Wait for an asynchronous action to complete, and return its
 -- value.  If the asynchronous action threw an exception, then the
 -- exception is re-thrown by 'wait'.
@@ -266,8 +296,8 @@ rethrowIO' = throwIO
 -- > wait = atomically . waitSTM
 --
 {-# INLINE wait #-}
-wait :: Async a -> IO a
-wait = tryAgain . atomically . waitSTM
+wait :: HasCallStack => Async a -> IO a
+wait = withFrozenCallStack $ annotateWithCallSite . tryAgain . atomically . waitSTM
   where
     -- See: https://github.com/simonmar/async/issues/14
     tryAgain f = f `catch` \BlockedIndefinitelyOnSTM -> f
@@ -485,8 +515,8 @@ waitEitherCatchCancel left right =
 -- re-thrown by 'waitEither'.
 --
 {-# INLINE waitEither #-}
-waitEither :: Async a -> Async b -> IO (Either a b)
-waitEither left right = atomically (waitEitherSTM left right)
+waitEither :: HasCallStack => Async a -> Async b -> IO (Either a b)
+waitEither left right = withFrozenCallStack $ annotateWithCallSite $ atomically (waitEitherSTM left right)
 
 -- | A version of 'waitEither' that can be used inside an STM transaction.
 --
@@ -524,8 +554,8 @@ waitEitherCancel left right =
 -- re-thrown by 'waitBoth'.
 --
 {-# INLINE waitBoth #-}
-waitBoth :: Async a -> Async b -> IO (a,b)
-waitBoth left right = tryAgain $ atomically (waitBothSTM left right)
+waitBoth :: HasCallStack => Async a -> Async b -> IO (a,b)
+waitBoth left right = withFrozenCallStack $ annotateWithCallSite $ tryAgain $ atomically (waitBothSTM left right)
   where
     -- See: https://github.com/simonmar/async/issues/14
     tryAgain f = f `catch` \BlockedIndefinitelyOnSTM -> f
