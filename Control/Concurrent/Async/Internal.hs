@@ -207,6 +207,26 @@ withAsyncOnWithUnmask ::
 withAsyncOnWithUnmask cpu actionWith =
   withAsyncUsing (rawForkOn cpu) (actionWith unsafeUnmask)
 
+#if MIN_VERSION_base(4,21,0)
+withAsyncUsing ::
+  CALLSTACK
+  (IO () -> IO ThreadId) -> IO a -> (Async a -> IO b) -> IO b
+-- The bracket version works, but is slow.  We can do better by
+-- hand-coding it:
+withAsyncUsing doFork action inner = do
+  var <- newEmptyTMVarIO
+  mask $ \restore -> do
+    let action_plus = debugLabelMe >> action
+    t <- doFork $ try (restore action_plus) >>= atomically . putTMVar var
+    let a = Async t (readTMVar var)
+    -- Using catch/no/propagate and rethrowIO, we do not wrap the exception
+    -- with a `WhileWaiting`
+    r <- restore (inner a) `catchNoPropagate` \e -> do
+      uninterruptibleCancel a
+      rethrowIO (e :: ExceptionWithContext SomeException)
+    uninterruptibleCancel a
+    return r
+#else
 withAsyncUsing ::
   CALLSTACK
   (IO () -> IO ThreadId) -> IO a -> (Async a -> IO b) -> IO b
@@ -220,9 +240,10 @@ withAsyncUsing doFork action inner = do
     let a = Async t (readTMVar var)
     r <- restore (inner a) `catchAll` \e -> do
       uninterruptibleCancel a
-      rethrowIO' e
+      throwIO e
     uninterruptibleCancel a
     return r
+#endif
 
 
 -- | This function attempts at rethrowing while keeping the context
