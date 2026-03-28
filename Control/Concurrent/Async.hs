@@ -185,6 +185,9 @@ module Control.Concurrent.Async (
     -- ** Linking
     link, linkOnly, link2, link2Only, ExceptionInLinkedThread(..),
 
+   -- ** Exception annotations
+   AsyncWaitLocation(..)
+
   ) where
 
 import Control.Concurrent.Async.Internal
