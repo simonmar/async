@@ -1,3 +1,14 @@
+- #165 async will preserve the `ExceptionContext` (on base >= 4.21, hence
+  starting with GHC 9.12) of exceptions runs inside the `Async`. Especially, it
+  now returs a callstack pointing inside the executed code instead of an
+  arbitrary location inside `async` library. For call such as `concurrently`,
+  it means that the callstack include the location of the `concurrently` and
+  continues inside the called functions. For call such as `withAsync + wait`,
+  the callstack contains the `withAsync` location as well as the location
+  inside the called function. The exception also contains an additional
+  annotation, `AsyncWaitLocation` which contains the location of the `wait`
+  call.
+
 ## Changes in 2.2.6
 
  - Added Control.Concurrent.Stream for processing streams with a fixed
