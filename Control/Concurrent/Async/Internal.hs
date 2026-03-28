@@ -26,7 +26,21 @@
 --
 -----------------------------------------------------------------------------
 
-module Control.Concurrent.Async.Internal where
+module Control.Concurrent.Async.Internal (
+  module Control.Concurrent.Async.Internal,
+
+#if MIN_VERSION_base(4,21,0)
+  -- * Compatibility wrapper for base < 4.20
+  -- These items are defined for base < 4.20 in this module and in
+  -- Control.Exception[.Context] for base >= 4.20. In order to ease usage of
+  -- the internal API, we reexport them here.
+  ExceptionWithContext(..),
+  rethrowIO,
+  catchNoPropagate,
+  tryWithContext
+#endif
+
+)where
 
 import Control.Concurrent.STM
 import Control.Exception
