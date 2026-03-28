@@ -91,7 +91,7 @@ data Async a = Async
   { asyncThreadId :: {-# UNPACK #-} !ThreadId
                   -- ^ Returns the 'ThreadId' of the thread running
                   -- the given 'Async'.
-  , _asyncWait    :: STM (Either SomeException a)
+  , _asyncWait    :: STM (Either (ExceptionWithContext SomeException) a)
   }
 
 instance Eq (Async a) where
@@ -159,7 +159,7 @@ asyncUsing doFork action = do
    -- t <- forkFinally action (\r -> atomically $ putTMVar var r)
    -- slightly faster:
    t <- mask $ \restore ->
-          doFork $ try (restore action_plus) >>= atomically . putTMVar var
+          doFork $ tryWithContext (restore action_plus) >>= atomically . putTMVar var
    return (Async t (readTMVar var))
 
 
@@ -213,7 +213,6 @@ withAsyncOnWithUnmask ::
 withAsyncOnWithUnmask cpu actionWith =
   withAsyncUsing (rawForkOn cpu) (actionWith unsafeUnmask)
 
-#if MIN_VERSION_base(4,21,0)
 withAsyncUsing ::
   CALLSTACK
   (IO () -> IO ThreadId) -> IO a -> (Async a -> IO b) -> IO b
@@ -223,7 +222,7 @@ withAsyncUsing doFork action inner = do
   var <- newEmptyTMVarIO
   mask $ \restore -> do
     let action_plus = debugLabelMe >> action
-    t <- doFork $ try (restore action_plus) >>= atomically . putTMVar var
+    t <- doFork $ tryWithContext (restore action_plus) >>= atomically . putTMVar var
     let a = Async t (readTMVar var)
     -- Using catch/no/propagate and rethrowIO, we do not wrap the exception
     -- with a `WhileWaiting`
@@ -232,37 +231,55 @@ withAsyncUsing doFork action inner = do
       rethrowIO (e :: ExceptionWithContext SomeException)
     uninterruptibleCancel a
     return r
+
+-- * Compatibilty logic with base 4.21 for exception context. The rational here is that this module is implemented with 'ExceptionWithContext' as the basic building block with the following special cases:
+--
+-- - With base >= 4.21 (GHC 9.12), exception context is propagated correctly using the 'rethrowIO', 'catchNoPropagate', ... functions.
+-- - With base >= 4.20 (GHC 9.10), exception context logic exists, but not the 'rethrow' logic. We reimplemented these function which are basically discarding the context
+-- - With base < 4.20 (GHC 9.8 and older), we just use the old functions which does not know anything about exception context. We implement an alias 'ExceptionWithContext' which is actually bare exception.
+--
+-- For all version we implement 'dropContext' which is able to drop the
+-- context, for all the function such as 'poll' which returns an exception without context.
+
+
+-- | Drop the exception context
+dropContext :: ExceptionWithContext t -> t
+
+-- | Rethrow an exception inside 'STM' context, while preserving the 'ExceptionContext'. See 'rethrowIO' for details.
+rethrowSTM :: Exception e => ExceptionWithContext e -> STM a
+
+#if MIN_VERSION_base(4,21,0)
+-- The 'rethrowIO', 'catchNoPropagate' and 'tryWithContext' are already available in base
 #else
-withAsyncUsing ::
-  CALLSTACK
-  (IO () -> IO ThreadId) -> IO a -> (Async a -> IO b) -> IO b
--- The bracket version works, but is slow.  We can do better by
--- hand-coding it:
-withAsyncUsing doFork action inner = do
-  var <- newEmptyTMVarIO
-  mask $ \restore -> do
-    let action_plus = debugLabelMe >> action
-    t <- doFork $ try (restore action_plus) >>= atomically . putTMVar var
-    let a = Async t (readTMVar var)
-    r <- restore (inner a) `catchAll` \e -> do
-      uninterruptibleCancel a
-      throwIO e
-    uninterruptibleCancel a
-    return r
+-- In older version, we reimplement them
+rethrowIO :: ExceptionWithContext SomeException -> IO a
+catchNoPropagate :: forall e a. Exception e => IO a -> (ExceptionWithContext e -> IO a) -> IO a
+tryWithContext :: IO a -> IO (Either (ExceptionWithContext SomeException) a)
 #endif
 
-
--- | This function attempts at rethrowing while keeping the context
--- This is internal and only working with GHC >=9.12, otherwise it fallsback to
--- standard 'throwIO'
-rethrowIO' :: SomeException -> IO a
 #if MIN_VERSION_base(4,21,0)
-rethrowIO' e = 
-  case fromException e of
-    Just (e' :: ExceptionWithContext SomeException) -> rethrowIO e'
-    Nothing -> throwIO e
+dropContext (ExceptionWithContext _context e) = e
+rethrowSTM e = throwSTM (NoBacktrace e)
+#elif MIN_VERSION_base(4,20,0)
+dropContext (ExceptionWithContext _context e) = e
+
+-- For rethrowSTM and rethrowIO, it is important to drop the context, otherwise
+-- we throw an exception which is actually an "ExceptionWithContext" embedding
+-- an exception (so that's an exception inside an exception) and later
+-- "fromException" won't behave as expected.
+rethrowSTM e = throwSTM (dropContext e)
+
+rethrowIO e = throwIO (dropContext e)
+catchNoPropagate = catch
+tryWithContext = try
 #else
-rethrowIO' = throwIO
+dropContext e = e
+rethrowSTM e = throwSTM e
+
+type ExceptionWithContext e = e
+rethrowIO e = throwIO e
+catchNoPropagate = catch
+tryWithContext = try
 #endif
 
 -- | An exception annotation which stores the callstack of a 'wait',
@@ -330,33 +347,38 @@ poll = atomically . pollSTM
 --
 waitSTM :: Async a -> STM a
 waitSTM a = do
-   r <- waitCatchSTM a
+   r <- waitCatchSTMWithContext a
    either (rethrowSTM) return r
-
--- | This function attempts at rethrowing while keeping the context
--- This is internal and only working with GHC >=9.12, otherwise it fallsback to
--- standard 'throwSTM'
-rethrowSTM :: SomeException -> STM a
-#if MIN_VERSION_base(4,21,0)
-rethrowSTM e = 
-  case fromException e of
-    Just (e' :: ExceptionWithContext SomeException) -> throwSTM (NoBacktrace e')
-    Nothing -> throwSTM e
-#else
-rethrowSTM = throwSTM
-#endif
 
 -- | A version of 'waitCatch' that can be used inside an STM transaction.
 --
 {-# INLINE waitCatchSTM #-}
 waitCatchSTM :: Async a -> STM (Either SomeException a)
-waitCatchSTM (Async _ w) = w
+waitCatchSTM (Async _ w) = either (Left . dropContext) Right <$> w
+
+
+-- | A version of 'waitCatch' that can be used inside an STM transaction.
+-- 
+-- The returned exception keep the 'ExceptionContext'. See 'tryWithContext' for details.
+{-# INLINE waitCatchSTMWithContext #-}
+waitCatchSTMWithContext :: Async a -> STM (Either (ExceptionWithContext SomeException) a)
+waitCatchSTMWithContext (Async _ w) = w
 
 -- | A version of 'poll' that can be used inside an STM transaction.
 --
 {-# INLINE pollSTM #-}
 pollSTM :: Async a -> STM (Maybe (Either SomeException a))
-pollSTM (Async _ w) = (Just <$> w) `orElse` return Nothing
+pollSTM (Async _ w) = (Just . either (Left . dropContext) Right <$> w) `orElse` return Nothing
+
+#if MIN_VERSION_base(4,21,0)
+-- | A version of 'poll' that can be used inside an STM transaction.
+--
+-- It keep the exception context associated with the exception. See 'tryWithContext' for details.
+--
+{-# INLINE pollSTMWithContext #-}
+pollSTMWithContext :: Async a -> STM (Maybe (Either (ExceptionWithContext SomeException) a))
+pollSTMWithContext (Async _ w) = (Just <$> w) `orElse` return Nothing
+#endif
 
 -- | Cancel an asynchronous action by throwing the @AsyncCancelled@
 -- exception to it, and waiting for the `Async` thread to quit.
@@ -743,7 +765,7 @@ race left right = concurrently' left right collect
     collect m = do
         e <- m
         case e of
-            Left ex -> rethrowIO' ex
+            Left ex -> rethrowIO ex
             Right r -> return r
 
 -- race_ :: IO a -> IO b -> IO ()
@@ -757,7 +779,7 @@ concurrently left right = concurrently' left right (collect [])
     collect xs m = do
         e <- m
         case e of
-            Left ex -> rethrowIO' ex
+            Left ex -> rethrowIO ex
             Right r -> collect (r:xs) m
 
 -- concurrentlyE :: IO (Either e a) -> IO (Either e b) -> IO (Either e (a, b))
@@ -770,13 +792,13 @@ concurrentlyE left right = concurrently' left right (collect [])
     collect xs m = do
         e <- m
         case e of
-            Left ex -> rethrowIO' ex
+            Left ex -> rethrowIO ex
             Right r -> collect (r:xs) m
 
 concurrently' ::
   CALLSTACK
   IO a -> IO b
-  -> (IO (Either SomeException (Either a b)) -> IO r)
+  -> (IO (Either (ExceptionWithContext SomeException) (Either a b)) -> IO r)
   -> IO r
 concurrently' left right collect = do
     done <- newEmptyMVar
@@ -787,10 +809,10 @@ concurrently' left right collect = do
         -- the thread to terminate.
         lid <- forkIO $ uninterruptibleMask_ $
           restore (left >>= putMVar done . Right . Left)
-            `catchAll` (putMVar done . Left)
+            `catchNoPropagate` (putMVar done . Left)
         rid <- forkIO $ uninterruptibleMask_ $
           restore (right >>= putMVar done . Right . Right)
-            `catchAll` (putMVar done . Left)
+            `catchNoPropagate` (putMVar done . Left)
 
         count <- newIORef (2 :: Int)
         let takeDone = do
@@ -831,7 +853,7 @@ concurrently_ left right = concurrently' left right (collect 0)
     collect i m = do
         e <- m
         case e of
-            Left ex -> rethrowIO' ex
+            Left ex -> rethrowIO ex
             Right _ -> collect (i + 1 :: Int) m
 
 

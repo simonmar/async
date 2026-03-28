@@ -196,7 +196,7 @@ withasync_wait_blocked = do
     Left e ->
         case fromException e of
             Just BlockedIndefinitelyOnMVar -> return ()
-            Nothing -> assertFailure $ show e
+            Nothing -> assertFailure $ show ("what", e)
     Right () -> assertFailure ""
 
 concurrently_success :: Assertion
