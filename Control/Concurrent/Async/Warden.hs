@@ -54,10 +54,11 @@ create :: IO Warden
 create = Warden <$> newMVar (Just mempty)
 
 -- | Shutdown a 'Warden', calling 'cancel' on all owned threads. Subsequent
--- calls to 'spawn' and 'shutdown' will be no-ops. 
--- 
+-- calls to 'spawn' will throw `WardenException`.  Subsequent calls to
+-- 'shutdown' will be a no-op.
+--
 -- Note that any exceptions thrown by the threads will be ignored. If you want
--- exceptions to be propagated, either call `wait` explicitly on the 'Async', 
+-- exceptions to be propagated, either call `wait` explicitly on the 'Async',
 -- or use 'link'.
 shutdown :: Warden -> IO ()
 shutdown (Warden v) = do
