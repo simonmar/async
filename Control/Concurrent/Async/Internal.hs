@@ -217,9 +217,7 @@ withAsyncUsing doFork action inner = do
     let action_plus = debugLabelMe >> action
     t <- doFork $ try (restore action_plus) >>= atomically . putTMVar var
     let a = Async t (readTMVar var)
-    r <- restore (inner a) `catchAll` \e -> do
-      uninterruptibleCancel a
-      throwIO e
+    r <- restore (inner a) `onException` uninterruptibleCancel a
     uninterruptibleCancel a
     return r
 
