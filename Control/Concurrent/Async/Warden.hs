@@ -5,7 +5,6 @@
   This source code is licensed under the BSD-style license found in the
   LICENSE file in the root directory of this source tree.
 -}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -31,13 +30,9 @@ import Data.HashSet (HashSet)
 import qualified Data.HashSet as HashSet
 import System.IO (fixIO)
 
-#if defined(__MHS__)
-import Prelude hiding(mapM_)
-import Control.Monad hiding(mapM_)
-import Data.Foldable(mapM_)
-#else
-import Control.Monad
-#endif
+import Prelude hiding (mapM_)
+import Control.Monad hiding (mapM_)
+import Data.Foldable (mapM_) -- MHS needs mapM_ from Data.Foldable
 
 -- | A 'Warden' is an owner of 'Async's which cancels them on 'shutdown'.
 --
