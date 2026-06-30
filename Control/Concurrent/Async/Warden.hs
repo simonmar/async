@@ -63,7 +63,7 @@ create = Warden <$> newMVar (Just mempty)
 shutdown :: Warden -> IO ()
 shutdown (Warden v) = do
   r <- swapMVar v Nothing
-  mapM_ (Async.mapConcurrently_ Async.cancel) r
+  mapM_ (Async.cancelMany . HashSet.toList) r
 
 forget :: Warden -> Async a -> IO ()
 forget (Warden v) async = modifyMVar_ v $ \x -> case x of
